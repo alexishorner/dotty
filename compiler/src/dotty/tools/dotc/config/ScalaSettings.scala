@@ -450,4 +450,6 @@ private sealed trait YSettings:
   val YjavaTasty: Setting[Boolean] = BooleanSetting(ForkSetting, "Yjava-tasty", "Pickler phase should compute TASTy for .java defined symbols for use by build tools", aliases = List("-Ypickle-java"), preferPrevious = true)
   val YearlyTastyOutput: Setting[AbstractFile] = OutputSetting(ForkSetting, "Yearly-tasty-output", "directory|jar", "Destination to write generated .tasty files to for use in pipelined compilation.", NoAbstractFile, aliases = List("-Ypickle-write"), preferPrevious = true)
   val YallowOutlineFromTasty: Setting[Boolean] = BooleanSetting(ForkSetting, "Yallow-outline-from-tasty", "Allow outline TASTy to be loaded with the -from-tasty option.")
+
+  val YasyncTasty: Setting[Boolean] = BooleanSetting(ForkSetting, "Yasync-tasty", "TODO")
 end YSettings

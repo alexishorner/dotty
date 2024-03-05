@@ -1,0 +1,20 @@
+# B does not depend on A and should compile
+$ copy-file changes/A1.scala src/main/scala/A.scala
+$ copy-file changes/B1.scala src/main/scala/B.scala
+> compile
+
+# B uses a method in A that does not exist and should not compile
+$ copy-file changes/B2.scala src/main/scala/B.scala
+-> compile
+
+# The method in A is created and should compile
+$ copy-file changes/A2.scala src/main/scala/A.scala
+> compile
+
+# The method is renamed in A, but not in B, the compilation should fail
+$ copy-file changes/A3.scala src/main/scala/A.scala
+-> compile
+
+# The method is renamed in B, which should fix the compilation
+$ copy-file changes/B3.scala src/main/scala/B.scala
+> compile

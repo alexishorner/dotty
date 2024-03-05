@@ -72,7 +72,7 @@ class ExtractAPI extends Phase {
     val doZincCallback = ctx.runZincPhases
     val nonLocalClassSymbols = new mutable.HashSet[Symbol]
     val units0 =
-      if doZincCallback then
+      if doZincCallback && !ctx.settings.YasyncTasty.value then
         val ctx0 = ctx.withProperty(NonLocalClassSymbolsInCurrentUnits, Some(nonLocalClassSymbols))
         super.runOn(units)(using ctx0)
       else
