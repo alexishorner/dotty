@@ -639,6 +639,7 @@ object Build {
         "org.jline" % "jline-terminal" % "3.25.1",
         "org.jline" % "jline-terminal-jna" % "3.25.1", // needed for Windows
         ("io.get-coursier" %% "coursier" % "2.0.16" % Test).cross(CrossVersion.for3Use2_13),
+        "ch.epfl.scala" %% "tasty-query" % "1.3.0",
       ),
 
       // For convenience, change the baseDirectory when running the compiler

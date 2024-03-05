@@ -418,6 +418,73 @@ class Pickler extends Phase {
           .resolve("best-effort")
       Files.createDirectories(outpath)
       BestEffortTastyWriter.write(outpath.nn, result)
+
+    if (!ctx.settings.YasyncTasty.value) return result
+
+    import dotty.tools.dotc.sbt.*
+    import dotty.tools.dotc.sbt.LazyTastyQueryClasspath.*
+    import tastyquery.Names as tqn
+
+    val sourceroot = ctx.settings.sourceroot.value
+    val entryDebugString = sourceroot
+
+    val packagePrefixesAndData = result.flatMap(
+      _.pickled.map(
+        (cls, tsty) => {
+          // val className = cls.fullName.toString()
+          // val pkgName = cls.owner.fullName.toString()
+          // (pkgName, InMemoryTasty(className, tsty))
+
+          val internalName =
+            if (cls.is(Module)) cls.binaryClassName.stripSuffix(str.MODULE_SUFFIX).nn
+            else cls.binaryClassName
+
+          val fullyQualifiedName = internalName
+          val path = fullyQualifiedName.split('.')
+          val binaryName = path.last
+          val packagePrefix = path.dropRight(1).mkString(".")
+          (packagePrefix, InMemoryTasty(fullyQualifiedName, binaryName, tsty))
+        }
+      ))
+
+    val packageData = packagePrefixesAndData
+    .groupBy(_._1)
+    .map(
+      (pkg, data) => {
+        val classes = data.map(_._2)
+        InMemoryPackageData(s"${entryDebugString}:${pkg}", pkg, () => classes.toList)
+      })
+    .toList
+
+    val relativePathToSource = result.map(unit => {
+      val source = unit.source
+      val relativePath =
+        val reference = ctx.settings.sourceroot.value
+        util.SourceFile.relativePath(source, reference)
+      (relativePath, source)
+    }).toMap
+
+    // TODO map sourceRelativePath to unit source file
+
+    // val sourcesAndClassNames = units0.flatMap(unit => unit.pickled.keys.map(cls => (unit.source, cls.fullName.toString())))
+    //                                  .groupBy(_._1)
+    //                                  .view
+    //                                  .mapValues(_.map((_, fullyQualifiedName) => {
+    //                                     // TODO convert class name
+    //                                     val path = fullyQualifiedName.split('.')
+    //                                     val binaryName = path.last
+    //                                     val packagePrefix = path.dropRight(1).toList
+    //                                     packagePrefix.map(tqn.termName(_)) ::: tqn.typeName(binaryName) :: Nil
+    //                                  }))
+    //                                  .toMap
+
+    val entry = InMemoryEntry(entryDebugString, packageData)
+    val cp = entry :: makeClasspath(using ctx)
+
+    val extract = ExtractAPITasty()
+    val cb = ctx.incCallback
+    extract.run(entry, cp, relativePathToSource, cb)
+
     result
   }
 
