@@ -8,13 +8,20 @@ import Modifiers.*
 
 import Bridge.*
 
-import scala.reflect.Typeable
-
 object CommonNames:
   val main: TermName = termName("main")
 end CommonNames
 
 object Extensions: 
+  extension (name: Name)(using Context)
+    def toTermName: TermName = name match
+      case name: TypeName => name.toTermName
+      case name: TermName => name
+    def toTypeName: TypeName = name match
+      case name: TypeName => name
+      case name: TermName => name.toTypeName
+  end extension
+
   extension (sym: Symbol)(using Context)
     def fullName: String =
       val b = new StringBuilder
@@ -33,22 +40,45 @@ object Extensions:
       case _ => NoPrefix
     end thisType
 
+    /** The chain of owners of this denotation, starting with the denoting symbol itself */
+    def ownersIterator: Iterator[Symbol] = new Iterator[Symbol] {
+      private var current: Symbol | Null = sym
+      def hasNext = current != null
+      def next: Symbol = {
+        val result = current.nn
+        current = result.owner
+        result
+      }
+    }
+
+    /** Is this symbol the root class or its companion object? */
+    def isRoot: Boolean =
+      (sym.owner == null) && sym.name.toTermName == Names.nme.RootName || sym.name == Names.nme.UserLandRootPackageName
+
+    /** Is this symbol the empty package class or its companion object? */
+    def isEmptyPackage: Boolean =
+      val owner = sym.owner
+      sym.name.toTermName == Names.nme.EmptyPackageName && owner != null && owner.isRoot
+
+    /** Is this symbol the empty package class or its companion object? */
+    def isEffectiveRoot: Boolean = sym.isRoot || sym.isEmptyPackage
+
     def isTopLevelClass: Boolean =
       true // TODO implement
     end isTopLevelClass
 
-    def isOverride: Boolean =
+    def hack_isOverride: Boolean =
       sym.is(Override)
-    end isOverride
+    end hack_isOverride
 
     /* Public equivalent of `Symbol.isStatic`. We need another name, because the extension cannot have the same name as a method. */
     def hack_isStatic: Boolean =
       sym.isStatic
     end hack_isStatic
 
-    private inline def predicateAs[T <: Symbol](inline p: T => Boolean): Boolean = sym match
+    private inline def predicateAs[T <: Symbol](inline p: T => Boolean): Boolean = (sym: @unchecked) match
         case sym: T => p(sym)
-        case _ => false // TODO check if reachable TODO Report
+        case _ => false
     end predicateAs
 
     // `ClassSymbol` predicates
@@ -60,7 +90,7 @@ object Extensions:
       predicateAs[ClassSymbol](_.isAbstractClass)
     end isAbstractClass
     
-    private inline def hasOpenLevel(level: OpenLevel): Boolean =
+    private inline def hasOpenLevel(inline level: OpenLevel): Boolean =
       predicateAs[ClassSymbol](_.openLevel == level)
     end hasOpenLevel
 
@@ -127,9 +157,9 @@ object Extensions:
   end extension
 
   extension(sym: TermOrTypeSymbol)(using Context)
-    def hack_isConstructor: Boolean =
+    def isConstructor: Boolean =
       sym.name == Names.nme.Constructor // FIXME why do we need `Names` prefix ?
-    end hack_isConstructor
+    end isConstructor
   end extension
 
   extension(sym: TermSymbol)(using Context)
