@@ -230,7 +230,7 @@ private class ExtractAPITastyCollector(using Context) extends ThunkHolder:
 
     // Synthetic methods that are always present do not affect the API
     // and can therefore be ignored.
-    def alwaysPresent(s: TermOrTypeSymbol) = csym.isModuleClass && s.hack_isConstructor
+    def alwaysPresent(s: TermOrTypeSymbol) = csym.isModuleClass && s.isConstructor
     val decls = csym.declarations
                     .filter(!alwaysPresent(_))
     val apiDecls = apiDefinitions(decls)
@@ -464,6 +464,7 @@ private class ExtractAPITastyCollector(using Context) extends ThunkHolder:
         // else
         //   tp.prefix
 
+        // FIXME is not wrapped in a ThisType, because prefix is a package instead of a module class
         val prefix = if (sym.owner.isPackage) // { type T } here T does not have an owner
           sym.owner.asPackage.packageRef // TODO check if this is correct
         else
@@ -578,8 +579,7 @@ private class ExtractAPITastyCollector(using Context) extends ThunkHolder:
         // val annot = tp.annotation
         // api.Annotated.of(apiType(tpe), Array(apiAnnotation(annot)))
       case tp: ThisType =>
-        ???
-        // apiThis(tp.cls)
+        apiThis(tp.cls)
       case tp: ParamRef =>
         ???
         // // TODO: Distinguishing parameters based on their names alone is not enough,
@@ -607,11 +607,11 @@ private class ExtractAPITastyCollector(using Context) extends ThunkHolder:
     api.Structure.of(apiTp, api.SafeLazy.strict(Array()), api.SafeLazy.strict(Array()))
   }
 
-  // def apiThis(sym: Symbol): api.Singleton = {
-  //   val pathComponents = sym.ownersIterator.takeWhile(!_.isEffectiveRoot)
-  //     .map(s => api.Id.of(s.name.toString))
-  //   api.Singleton.of(api.Path.of(pathComponents.toArray.reverse ++ Array(Constants.thisPath)))
-  // }
+  def apiThis(sym: Symbol): api.Singleton = {
+    val pathComponents = sym.ownersIterator.takeWhile(!_.isEffectiveRoot)
+      .map(s => api.Id.of(s.name.toString))
+    api.Singleton.of(api.Path.of(pathComponents.toArray.reverse ++ Array(Constants.thisPath)))
+  }
 
   def apiTypeParameter(tparam: ClassTypeParamSymbol): api.TypeParameter =
     apiTypeParameter(tparam.name.toString, tparam.variance,
@@ -664,7 +664,7 @@ private class ExtractAPITastyCollector(using Context) extends ThunkHolder:
     //   sym.isOneOf(GivenOrImplicit), sym.is(Lazy), sym.is(Macro), sym.isSuperAccessor)
     val absOver = sym.isAbstractOverride
     val abs = absOver || sym.isTrait || sym.isAbstractClass || sym.isAbstractMember
-    val over = absOver || sym.isOverride // TODO try with nextOverridenSymbols
+    val over = absOver || sym.hack_isOverride // TODO try with nextOverridenSymbols
     
     val isFinal = sym.isFinal
     val isSealed = sym.isSealed
