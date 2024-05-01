@@ -123,11 +123,11 @@ object Extensions:
     def isEffectiveRoot: Boolean = sym.isRoot || sym.isEmptyPackage
 
     def isConstructor: Boolean =
-      sym.name == Names.nme.Constructor // FIXME why do we need `Names` prefix ?
+      sym.name == nme.Constructor // FIXME why do we need `Names` prefix ?
     end isConstructor
     
     def isTopLevelClass: Boolean =
-      true // TODO implement
+      true // TODO implement (owner is package)
     end isTopLevelClass
 
     def hack_isOverride: Boolean =
@@ -199,6 +199,10 @@ object Extensions:
       predicateAs[TermSymbol](_.isInline)
     end isInline
 
+    def isParamWithDefault: Boolean =
+      predicateAs[TermSymbol](_.isParamWithDefault)
+    end isParamWithDefault
+
   end extension
 
   extension(sym: ClassSymbol)(using Context)
@@ -206,8 +210,73 @@ object Extensions:
       TypeRef(sym.owner.thisType, sym)
     end typeRef
 
+    /** Recursively assemble all children of this symbol, Preserves order of insertion.
+     */
+    def sealedStrictDescendants: List[ClassSymbol | TermSymbol] =
+      import scala.collection.mutable
+      import dotty.tools.dotc.util
+      import scala.annotation.tailrec
+
+      @tailrec
+      def findLvlN(
+        explore: mutable.ArrayDeque[ClassSymbol | TermSymbol],
+        seen: util.HashSet[ClassSymbol | TermSymbol],
+        acc: mutable.ListBuffer[ClassSymbol | TermSymbol]
+      ): List[ClassSymbol | TermSymbol] =
+        if explore.isEmpty then
+          acc.toList
+        else
+          val sym      = explore.head
+          val explore1 = explore.dropInPlace(1)
+          val lvlN     = sym match
+            case sym: ClassSymbol => sym.sealedChildren
+            case _                => Nil
+          // val notSeen  = lvlN.filterConserve(!seen.contains(_))
+          val notSeen  = lvlN.filter(!seen.contains(_))
+          if notSeen.isEmpty then
+            findLvlN(explore1, seen, acc)
+          else
+            findLvlN(explore1 ++= notSeen, {seen ++= notSeen; seen}, acc ++= notSeen)
+      end findLvlN
+
+      /** Scans through `explore` to see if there are recursive children.
+       *  If a symbol in `explore` has children that are not contained in
+       *  `lvl1`, fallback to `findLvlN`, or else return `lvl1`.
+       */
+      @tailrec
+      def findLvl2(
+        lvl1: List[ClassSymbol | TermSymbol], explore: List[ClassSymbol | TermSymbol], seenOrNull: util.HashSet[ClassSymbol | TermSymbol] | Null
+      ): List[ClassSymbol | TermSymbol] = explore match
+        case sym :: explore1 =>
+          val lvl2 = sym match
+            case sym: ClassSymbol => sym.sealedChildren
+            case _                => Nil
+          if lvl2.isEmpty then // no children, scan rest of explore1
+            findLvl2(lvl1, explore1, seenOrNull)
+          else // check if we have seen the children before
+            val seen = // initialise the seen set if not already
+              if seenOrNull != null then seenOrNull
+              else util.HashSet.from(lvl1)
+            // val notSeen = lvl2.filterConserve(!seen.contains(_))
+            val notSeen = lvl2.filter(!seen.contains(_))
+            if notSeen.isEmpty then // we found children, but we had already seen them, scan the rest of explore1
+              findLvl2(lvl1, explore1, seen)
+            else // found unseen recursive children, we should fallback to the loop
+              findLvlN(
+                explore = mutable.ArrayDeque.from(explore1).appendAll(notSeen),
+                seen = {seen ++= notSeen; seen},
+                acc = mutable.ListBuffer.from(lvl1).appendAll(notSeen)
+              )
+        case nil =>
+          lvl1
+      end findLvl2
+
+      val lvl1 = sym.sealedChildren
+      findLvl2(lvl1, lvl1, seenOrNull = null)
+
     def sealedDescendants: List[ClassSymbol | TermSymbol] =
-      sym :: sym.sealedChildren // TODO reimplement like in dotty
+      // sym :: sym.sealedChildren // TODO reimplement like in dotty
+      sym :: sym.sealedStrictDescendants
     end sealedDescendants
 
     def hasMainMethod: Boolean =
