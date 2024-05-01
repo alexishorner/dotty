@@ -483,6 +483,8 @@ class Pickler extends Phase {
 
     val extract = ExtractAPITasty()
     val cb = ctx.incCallback
+
+    given ReadOnlyContext = if useExecutor then ReadOnlyContext.buffered else ReadOnlyContext.eager // TODO maybe avoid duplication of this line with a method
     extract.run(entry, cp, relativePathToSource, cb)
 
     result
