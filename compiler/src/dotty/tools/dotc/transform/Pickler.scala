@@ -487,6 +487,18 @@ class Pickler extends Phase {
     given ReadOnlyContext = if useExecutor then ReadOnlyContext.buffered else ReadOnlyContext.eager // TODO maybe avoid duplication of this line with a method
     extract.run(entry, cp, relativePathToSource, cb)
 
+
+    
+    // FIXME remove hack
+    import java.io.PrintWriter
+    import dotty.tools.io.File
+    for (source, classes) <- extract.mySourceAndClasses do
+      if (ctx.settings.YdumpSbtInc.value) {
+        // Append to existing file that should have been created by ExtractDependencies
+        classes.foreach(source => report.echo(DefaultShowAPI(source)))
+      }
+    end for
+
     result
   }
 
