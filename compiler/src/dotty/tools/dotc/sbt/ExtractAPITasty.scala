@@ -29,6 +29,8 @@ import dotty.tools.io.FileWriters.ReadOnlyContext
 import dotty.tools.io.FileWriters.ctx as dottyCtx
 
 class ExtractAPITasty:
+  var mySourceAndClasses: List[(SourceFile, Seq[api.ClassLike])] = Nil
+  
   private def listDecls(symbol: Symbol)(using Context): List[Symbol] = // TODO remove
     val decls = symbol match
       case symbol: DeclaringSymbol =>
@@ -61,6 +63,8 @@ class ExtractAPITasty:
       val apiTraverser = new ExtractAPITastyCollector
       val classes = apiTraverser.apiSource(symbols)
       val mainClasses = apiTraverser.mainClasses
+
+      mySourceAndClasses ::= (source, classes)
 
     // if (ctx.settings.YdumpSbtInc.value) {
     //   // Append to existing file that should have been created by ExtractDependencies
@@ -317,10 +321,10 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
       trmsym.kind match {
         case TermSymbolKind.Var =>
           api.Var.of(sym.name.toString, apiAccess(sym), apiModifiers(sym),
-            apiAnnotations(sym, inlineOrigin).toArray, apiType(trmsym.termRef)) // TODO check if termRef or declaredType
+            apiAnnotations(sym, inlineOrigin).toArray, apiType(trmsym.declaredType))
         case TermSymbolKind.Val =>
           api.Val.of(sym.name.toString, apiAccess(sym), apiModifiers(sym),
-            apiAnnotations(sym, inlineOrigin).toArray, apiType(trmsym.termRef)) // TODO check if termRef or declaredType
+            apiAnnotations(sym, inlineOrigin).toArray, apiType(trmsym.declaredType))
         case _ =>
           apiDef(sym.asTerm, inlineOrigin)
       }
@@ -337,7 +341,7 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
     var inlineExtras = 41
 
     def mixInlineParam(p: Symbol): Unit =
-      if inlineOrigin.exists(io => /*io.exists*/ false) && p.isInline then
+      if inlineOrigin.isDefined && p.isInline then
         seenInlineExtras = true
         inlineExtras = hashInlineParam(p, inlineExtras)
 
@@ -361,7 +365,7 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
       val apiParams = eitherToUnion(params).lazyZip(mt.paramInfos).map((param, ptype) =>
                     mixInlineParam(param)
                     api.MethodParameter.of(
-                      param.name.toString, apiType(ptype), false /*param.is(HasDefault)*/, api.ParameterModifier.Plain))
+                      param.name.toString, apiType(ptype), param.isParamWithDefault, api.ParameterModifier.Plain))
       api.ParameterList.of(apiParams.toArray, mt.isImplicitOrContextual)
 
     def paramLists(t: TypeOrMethodic, paramss: List[ParamSymbolsClause]): List[api.ParameterList] = t match {
@@ -418,15 +422,15 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
     val access = apiAccess(sym)
     val modifiers = apiModifiers(sym)
     val as = apiAnnotations(sym, inlineOrigin = None)
-    // val tpe = sym.info
+    val tpe = sym.localRef  // TODO check
 
-    // if (sym.isTypeAlias)
-    //   api.TypeAlias.of(name, access, modifiers, as.toArray, typeParams, apiType(tpe.bounds.hi))
-    // else {
-    //   // assert(sym.isAbstractType)
-    //   assert(sym.isClass && sym.asClass.isAbstractClass)
-    //   api.TypeDeclaration.of(name, access, modifiers, as.toArray, typeParams, apiType(tpe.bounds.lo), apiType(tpe.bounds.hi))
-    // }
+    if (sym.isTypeAlias)
+      api.TypeAlias.of(name, access, modifiers, as.toArray, typeParams, apiType(tpe.bounds.high))
+    else {
+      // assert(sym.isAbstractOrParamType)
+      assert(sym.isAbstractMember || sym.isAbstractClass || sym.isInstanceOf[TypeParamSymbol]) // TODO check
+      api.TypeDeclaration.of(name, access, modifiers, as.toArray, typeParams, apiType(tpe.bounds.low), apiType(tpe.bounds.high))
+    }
     api.TypeAlias.of(name, access, modifiers, as.toArray, typeParams, Constants.emptyType)
   }
 
@@ -504,10 +508,9 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
         val apiArgs = args.map(processArg)
         api.Parameterized.of(apiTycon, apiArgs.toArray)
       case tl: TypeLambda =>
-        ???
-        // val apiTparams = tl.typeParams.map(apiTypeParameter)
-        // val apiRes = apiType(tl.resType)
-        // api.Polymorphic.of(apiRes, apiTparams.toArray)
+        val apiTparams = tl.typeParams.map(apiTypeParameter)
+        val apiRes = apiType(tl.resultType)
+        api.Polymorphic.of(apiRes, apiTparams.toArray)
       case rt: RefinedType =>
         val name = rt.refinedName.toString
         val parent = apiType(rt.parent)
@@ -583,10 +586,9 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
         val constant = tp.value
         api.Constant.of(apiType(constant.typeValue), constant.stringValue)
       case tp: AnnotatedType =>
-        ???
-        // val tpe = tp.typ
-        // val annot = tp.annotation
-        // api.Annotated.of(apiType(tpe), Array(apiAnnotation(annot)))
+        val tpe = tp.typ
+        val annot = tp.annotation
+        api.Annotated.of(apiType(tpe), Array(apiAnnotation(annot)))
       case tp: ThisType =>
         apiThis(tp.cls)
       case tp: ParamRef =>
@@ -600,9 +602,11 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
       //   apiType(tp.ref)
       // case tp: TypeVar =>
       //   apiType(tp.underlying)
-      // case SuperType(thistpe, supertpe) =>
-      //   val s = combineApiTypes(apiType(thistpe), apiType(supertpe))
-      //   withMarker(s, superMarker)
+      case tp: SuperType =>
+        val thistpe = tp.thistpe
+        val supertpe = tp.underlying
+        val s = combineApiTypes(apiType(thistpe), apiType(supertpe))
+        withMarker(s, superMarker)
       case tp: NothingType =>
         apiType(defn.SyntacticNothingType)
       case _ => {
@@ -626,7 +630,7 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
     api.Singleton.of(api.Path.of(pathComponents.toArray.reverse ++ Array(Constants.thisPath)))
   }
 
-  def apiTypeParameter(tparam: ClassTypeParamSymbol): api.TypeParameter =
+  def apiTypeParameter(tparam: TypeConstructorParam): api.TypeParameter =
     apiTypeParameter(tparam.name.toString, tparam.variance,
       tparam.declaredBounds.low, tparam.declaredBounds.high)
 
@@ -661,7 +665,16 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
       //     Constants.unqualified
       //   else
       //     api.IdQualifier.of(sym.privateWithin.fullName.toString)
-      val qualifier = Constants.unqualified
+      val qualifier =
+        val scope = visibility.flatMap {
+          case ScopedProtected(scope) => Some(scope)
+          case ScopedPrivate(scope) => Some(scope)
+          case _ => None
+        }
+        scope match
+          case Some(scope) => api.IdQualifier.of(scope.fullName.toString)
+          case _ =>
+            Constants.unqualified
       if (visibility.exists{ case Protected | ProtectedThis | ScopedProtected => true; case _ => false})
         api.Protected.of(qualifier)
       else
@@ -677,7 +690,7 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
     //   sym.isOneOf(GivenOrImplicit), sym.is(Lazy), sym.is(Macro), sym.isSuperAccessor)
     val absOver = sym.isAbstractOverride
     val abs = absOver || sym.isTrait || sym.isAbstractClass || sym.isAbstractMember
-    val over = absOver || sym.hack_isOverride // TODO try with nextOverridenSymbols
+    val over = absOver || sym.hack_isOverride // TODO ignore override
     
     val isFinal = sym.isFinal
     val isSealed = sym.isSealed
@@ -795,7 +808,7 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
           case ref: TermReferenceTree @unchecked =>
             val sym = ref.symbol
             // if sym.is(Inline, butNot = Param) && !seenInlineCache.contains(sym) then
-            if sym.isInline && !seenInlineCache.contains(sym) then
+            if sym.isInline && !seenInlineCache.contains(sym) then  // TODO butNot = Param
               // An inline method that calls another inline method will eventually inline the call
               // at a non-inline callsite, in this case if the implementation of the nested call
               // changes, then the callsite will have a different API, we should hash the definition
@@ -878,7 +891,6 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
     // information to find tests to run (for example junit tests are
     // annotated @org.junit.Test).
     api.Annotation.of(
-      // apiType(annot.tree.tpe), // Used by sbt to find tests to run
       apiType(annot.tree.tpe), // Used by sbt to find tests to run
       Array(api.AnnotationArgument.of("TREE_HASH", treeHash(annot.tree, inlineOrigin = None).toString)))
   }
