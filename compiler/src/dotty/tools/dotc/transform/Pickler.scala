@@ -479,15 +479,32 @@ class Pickler extends Phase {
     //                                  .toMap
 
     val entry = InMemoryEntry(entryDebugString, packageData)
-    val cp = entry :: makeClasspath(using ctx)
+    val cp = entry :: makeClasspath
 
     val extract = ExtractAPITasty()
     val cb = ctx.incCallback
 
     given ReadOnlyContext = if useExecutor then ReadOnlyContext.buffered else ReadOnlyContext.eager // TODO maybe avoid duplication of this line with a method
-    extract.run(entry, cp, relativePathToSource, cb)
+    
+    if ctx.settings.YcompareAsyncTasty.value then
+      val comparator = debug.IncCallbackComparator()
+      val apiCallback = comparator.apiCallback
 
+      val extractApi = ExtractAPI()
+      extractApi.runOn(units)(using ctx.fresh.setIncCallback(apiCallback).setSetting(ctx.settings.YforceSbtPhases, true))
+      extract.run(entry, cp, relativePathToSource, comparator.apiTastyCallback) // FIXME ugly duplication
 
+      comparator.diffAndPropagate(cb) match
+        case Left(diff) =>
+          report.error(em"API TASTy difference detected:\n${diff.collapsedTrace}")
+        case Right(_) =>
+          ()
+    else
+      extract.run(entry, cp, relativePathToSource, cb)
+
+    if extract.hasErrors.get() then
+      report.error("Some errors happened during the Extract API TASTy phase")
+    
     
     // FIXME remove hack
     import java.io.PrintWriter
