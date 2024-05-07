@@ -28,7 +28,11 @@ import core.Decorators.*
 import dotty.tools.io.FileWriters.ReadOnlyContext
 import dotty.tools.io.FileWriters.ctx as dottyCtx
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 class ExtractAPITasty:
+  val hasErrors: AtomicBoolean = AtomicBoolean() // TODO store errors to report them later
+
   var mySourceAndClasses: List[(SourceFile, Seq[api.ClassLike])] = Nil
   
   private def listDecls(symbol: Symbol)(using Context): List[Symbol] = // TODO remove
@@ -78,13 +82,17 @@ class ExtractAPITasty:
       withIncCallback: cb =>
         classes.foreach(cb.api(source, _))
         mainClasses.foreach(cb.mainClass(source, _))
-    val dummy = 0
+    
+      if apiTraverser.hasErrors then
+        hasErrors.set(true)
   end run
 end ExtractAPITasty
 
 
 private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) extends ThunkHolder:
   import xsbti.api
+
+  var hasErrors: Boolean = false
 
   private def log(msg: String, pos: SourcePosition = SourcePosition.NoPosition): Unit =
     dottyCtx.reporter.log(msg)
@@ -97,7 +105,7 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
 
   private def error(msg: String, pos: SourcePosition = SourcePosition.NoPosition): Unit =
     dottyCtx.reporter.error(msg.toMessage)
-    throw new RuntimeException(msg) // TODO set atomic boolean to true to signal error
+    hasErrors = true
 
   /** Report an internal error in incremental compilation. */
   private def internalError(msg: => String, pos: SourcePosition = SourcePosition.NoPosition): Unit = // TODO move method
@@ -196,7 +204,7 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
     // import dotty.tools.dotc.core.NameOps.*
     // val name = sym.fullName.stripModuleClassSuffix.toString
     // val name = dottyNames.typeName(sym.fullName).stripModuleClassSuffix.toString // TODO use underlying
-    val name = sym.name.stripModuleClassSuffix2.toString
+    val name = sym.fullNameNoModuleClassSuffix
       // We strip module class suffix. Zinc relies on a class and its companion having the same name
     
     val tparams = sym.typeParams.map(apiTypeParameter).toArray

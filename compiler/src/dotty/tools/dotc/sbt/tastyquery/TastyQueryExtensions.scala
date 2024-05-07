@@ -8,6 +8,8 @@ import Modifiers.*
 
 import Bridge.*
 
+import scala.annotation.tailrec
+
 object CommonNames:
   val main: TermName = termName("main")
   val pkg: TermName = termName("package")
@@ -76,6 +78,17 @@ object Extensions:
       build(sym)
       b.toString
     end fullName
+
+    def fullNameNoModuleClassSuffix: String =
+      @tailrec
+      def names(sym: Symbol, acc: List[Name]): List[Name] =
+        val newAcc = sym.name.stripModuleClassSuffix2 :: acc
+        if sym.owner == null then
+          newAcc
+        else
+          names(sym.owner, newAcc)
+      names(sym, Nil).filter(_ != nme.RootName).mkString(".")
+    end fullNameNoModuleClassSuffix
 
     def zincMangledName: String =
       // if sym.isConstructor  then

@@ -493,5 +493,6 @@ private sealed trait YSettings:
   val YoutputOnlyTasty: Setting[Boolean] = BooleanSetting(ForkSetting, "Youtput-only-tasty", "Used to only generate the TASTy file without the classfiles", deprecation = Deprecation.removed())
 
   val YasyncTasty: Setting[Boolean] = BooleanSetting(ForkSetting, "Yasync-tasty", "TODO")
+  val YcompareAsyncTasty: Setting[Boolean] = BooleanSetting(ForkSetting, "Ycompare-async-tasty", "TODO")
 end YSettings
 
