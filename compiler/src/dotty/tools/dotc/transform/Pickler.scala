@@ -488,10 +488,9 @@ class Pickler extends Phase {
     
     if ctx.settings.YcompareAsyncTasty.value then
       val comparator = debug.IncCallbackComparator()
-      val apiCallback = comparator.apiCallback
 
       val extractApi = ExtractAPI()
-      extractApi.runOn(units)(using ctx.fresh.setIncCallback(apiCallback).setSetting(ctx.settings.YforceSbtPhases, true))
+      extractApi.runOn(units)(using ctx.fresh.setIncCallback(comparator.apiCallback).setSetting(ctx.settings.YforceSbtPhases, true))
       extract.run(entry, cp, relativePathToSource, comparator.apiTastyCallback) // FIXME ugly duplication
 
       comparator.diffAndPropagate(cb) match

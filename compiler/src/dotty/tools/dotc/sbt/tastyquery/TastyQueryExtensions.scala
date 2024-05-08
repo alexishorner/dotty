@@ -319,6 +319,19 @@ object Extensions:
     end isMainMethod
   end extension
 
+  extension (tp: TypeMappable)(using Context)
+    def hack_isLambdaSub: Boolean = tp match
+      case tp: Type => tp.isLambdaSub
+      case _ => false
+    end hack_isLambdaSub
+
+    def hack_dealiasKeepAnnots: TypeMappable = tp match
+      case tp: Type =>
+        tp.hack_dealiasKeepAnnots
+      case _ => tp
+    end hack_dealiasKeepAnnots
+  end extension
+
   extension (tpe: TypeOrMethodic)(using Context)
     /** Is this type a (neither aliased nor applied nor annotated) reference to class `sym`? */
     def isDirectRef(sym: Symbol): Boolean = tpe match // TODO check stripTypeVar
@@ -361,6 +374,29 @@ object Extensions:
   end extension
 
   extension (tpe: Type)(using Context)
+    def hack_dealiasKeepAnnots: Type = tpe match
+      case tp: TypeRef =>
+        tp.optSymbol match
+          case Some(tpSym: TypeMemberSymbol) =>
+            tpSym.typeDef match
+              case TypeMemberDefinition.TypeAlias(alias)          => alias.hack_dealiasKeepAnnots
+              case TypeMemberDefinition.OpaqueTypeAlias(_, alias) => alias.hack_dealiasKeepAnnots
+              case _                                              => tp
+          case _ =>
+            tp.optAliasedType match
+              case Some(alias) => alias.hack_dealiasKeepAnnots
+              case None        => tp
+      case tp: AppliedType =>
+        val tycon1 = tp.tycon.hack_dealiasKeepAnnots
+        if (tycon1 ne tp.tycon) || tycon1.isInstanceOf[TypeLambda] then tp.superType.hack_dealiasKeepAnnots
+        else tpe
+      case tp: AnnotatedType =>
+        val typ = tp.typ.hack_dealiasKeepAnnots
+        tp.derivedAnnotatedType(typ, tp.annotation)
+      case _ =>
+        tpe
+    end hack_dealiasKeepAnnots
+
     def isRef(sym: TypeSymbol): Boolean = tpe match
       case tpe: TypeRef => tpe.optSymbol.contains(sym)
       case _            => false
