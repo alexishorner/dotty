@@ -456,8 +456,9 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
     // TODO: Never dealias. We currently have to dealias because
     // sbt main class discovery relies on the signature of the main
     // method being fully dealiased. See https://github.com/sbt/zinc/issues/102
-    // val tp2 = if (!tp.isLambdaSub) tp.dealiasKeepAnnots else tp // FIXME isLambdaSub is private
-    val tp2 = tp
+    // val tp2 = if (!tp.isLambdaSub) tp.dealiasKeepAnnots else tp
+    val tp2 = if tp != null && !tp.hack_isLambdaSub && tp != defn.SyntacticNothingType /*FIXME workaround to avoid infinite recursion*/ then tp.hack_dealiasKeepAnnots else tp // FIXME isLambdaSub is private
+    // val tp2 = tp
     tp2 match { // TODO add more cases
       case NoPrefix /*| NoType*/ | null =>
         Constants.emptyType

@@ -3,6 +3,7 @@ import scala.collection.immutable.Queue
 import IncCallbackResults.*
 import dotty.tools.dotc.sbt.interfaces
 import scala.annotation.constructorOnly
+import dotty.tools.dotc.sbt.DefaultShowAPI
 
 class IncCallbackComparator:
   val apiCallback = new RecordingIncCallback
@@ -11,9 +12,9 @@ class IncCallbackComparator:
   def diffAndPropagate(cb: interfaces.IncrementalCallback | Null): Either[IncDiff, Unit] =
     val sourceFiles = apiCallback.results.keySet ++ apiTastyCallback.results.keys
     val merged = sourceFiles.map(sourceFile => {
-      val apiResult = apiCallback.results(sourceFile)
-      val apiTastyResult = apiTastyCallback.results(sourceFile)
-      val diff = apiResult.zipAll(apiTastyResult, NoResult, NoResult)
+      val apiResult = apiCallback.results(sourceFile).map(_.toString)
+      val apiTastyResult = apiTastyCallback.results(sourceFile).map(_.toString)
+      val diff = apiResult.zipAll(apiTastyResult, NoResult.toString, NoResult.toString)
                           .map((a, b) => if a == b then Identical(a) else Different(a, b))
       (sourceFile, diff)
     }).toMap
@@ -33,11 +34,11 @@ class IncCallbackComparator:
         else ())
 
   sealed trait IncDiffEntry
-  case class Different(expected: IncResultEntry, actual: IncResultEntry) extends IncDiffEntry:
-    override def toString: String = s"Expected: $expected\nActual:   $actual"
+  case class Different(expected: String, actual: String) extends IncDiffEntry:
+    override def toString: String = s"Expected:\n$expected\nActual:\n$actual"
   end Different
-  case class Identical(result: IncResultEntry) extends IncDiffEntry:
-    override def toString: String = s"Identical value: $result"
+  case class Identical(result: String) extends IncDiffEntry:
+    override def toString: String = s"Identical value:\n$result"
 
   class IncDiff(private val groupedEntries: Map[StartSource, Queue[Queue[IncDiffEntry]]]):
     def hasDifferences: Boolean = groupedEntries.values.exists(groups => groups.exists(group => group.exists { case Different(_, _) => true; case _ => false }))
@@ -53,7 +54,7 @@ class IncCallbackComparator:
     def traceImpl(groupCollapser: Queue[IncDiffEntry] => String): String =
       val sb = new StringBuilder
       groupedEntries.foreach((source, groups) =>
-        sb ++= s"Source: $source\n"
+        sb ++= s"Source: ${source.sourceFile}\n"
         groups.foreach(group => sb ++= groupCollapser(group))
         sb ++= "\n"
       )
