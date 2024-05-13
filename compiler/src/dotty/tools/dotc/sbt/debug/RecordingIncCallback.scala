@@ -6,6 +6,7 @@ import xsbti.api.ClassLike
 
 import dotty.tools.dotc.util.SourceFile
 import scala.collection.immutable.Queue
+import java.nio.file.Path
 
 class RecordingIncCallback extends interfaces.IncrementalCallback:
   var results: Map[StartSource, Queue[IncResultEntry]] = Map.empty.withDefaultValue(Queue.empty)
@@ -27,4 +28,7 @@ class RecordingIncCallback extends interfaces.IncrementalCallback:
     
   override def mainClass(sourceFile: SourceFile | Null, className: String | Null): Unit =
     record(MainClass(sourceFile, className))
+
+  override def generatedNonLocalClass(source: SourceFile | Null, classFile: Path | Null, binaryClassName: String | Null, srcClassName: String | Null): Unit =
+    record(GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName))
 end RecordingIncCallback

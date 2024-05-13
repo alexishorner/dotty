@@ -43,7 +43,6 @@ class ExtractAPITasty:
 
     symbol :: decls
 
-    
   def run(entry: ClasspathEntry, cp: Classpath, relativePathToDottySource: Map[String, SourceFile], cb: interfaces.IncrementalCallback | Null)(using ReadOnlyContext): Unit =
     def withIncCallback(op: interfaces.IncrementalCallback => Unit): Unit =
       if cb != null then
@@ -86,6 +85,76 @@ class ExtractAPITasty:
       if apiTraverser.hasErrors then
         hasErrors.set(true)
   end run
+
+
+
+
+
+
+  override def runOn(units: List[CompilationUnit])(using Context): List[CompilationUnit] =
+    // val doZincCallback = ctx.runZincPhases
+    // val nonLocalClassSymbols = new mutable.HashSet[Symbol]
+    // val units0 =
+    //   if doZincCallback && /*!ctx.settings.YasyncTasty.value*/ !ctx.settings.YdisableExtractAPI.value then
+    //     val ctx0 = ctx.withProperty(NonLocalClassSymbolsInCurrentUnits, Some(nonLocalClassSymbols))
+    //     super.runOn(units)(using ctx0)
+    //   else
+    //     units // still run the phase for the side effects (writing TASTy files to -Yearly-tasty-output)
+    // if doZincCallback then
+    //   ctx.withIncCallback(recordNonLocalClasses(nonLocalClassSymbols, _))
+    // if ctx.settings.YjavaTasty.value then
+    //   units0.filterNot(_.typedAsJava) // remove java sources, this is the terminal phase when `-Yjava-tasty` is set
+    // else
+    //   units0
+    ???
+  end runOn
+
+  private def recordNonLocalClasses(nonLocalClassSymbols: mutable.HashSet[Symbol], cb: interfaces.IncrementalCallback)(using Context): Unit =
+  //   for cls <- nonLocalClassSymbols do
+  //     val sourceFile = cls.source
+  //     if sourceFile.exists && cls.isDefinedInCurrentRun then
+  //       recordNonLocalClass(cls, sourceFile, cb)
+  //   ctx.run.nn.asyncTasty.foreach(_.signalAPIComplete())
+    ???
+
+  // private def recordNonLocalClass(cls: Symbol, sourceFile: SourceFile, cb: interfaces.IncrementalCallback)(using Context): Unit =
+  //   def registerProductNames(fullClassName: String, binaryClassName: String) =
+  //     val pathToClassFile = s"${binaryClassName.replace('.', java.io.File.separatorChar)}.class"
+
+  //     val classFile = {
+  //       ctx.settings.outputDir.value match {
+  //         case jar: JarArchive =>
+  //           // important detail here, even on Windows, Zinc expects the separator within the jar
+  //           // to be the system default, (even if in the actual jar file the entry always uses '/').
+  //           // see https://github.com/sbt/zinc/blob/dcddc1f9cfe542d738582c43f4840e17c053ce81/internal/compiler-bridge/src/main/scala/xsbt/JarUtils.scala#L47
+  //           new java.io.File(s"$jar!$pathToClassFile")
+  //         case outputDir =>
+  //           new java.io.File(outputDir.file, pathToClassFile)
+  //       }
+  //     }
+
+  //     cb.generatedNonLocalClass(sourceFile, classFile.toPath(), binaryClassName, fullClassName)
+  //   end registerProductNames
+
+  //   val fullClassName = atPhase(sbtExtractDependenciesPhase) {
+  //     ExtractDependencies.classNameAsString(cls)
+  //   }
+  //   val binaryClassName = cls.binaryClassName
+  //   registerProductNames(fullClassName, binaryClassName)
+
+  //   // Register the names of top-level module symbols that emit two class files
+  //   val isTopLevelUniqueModule =
+  //     cls.owner.is(PackageClass) && cls.is(ModuleClass) && cls.companionClass == NoSymbol
+  //   if isTopLevelUniqueModule then
+  //     registerProductNames(fullClassName, binaryClassName.stripSuffix(str.MODULE_SUFFIX))
+  // end recordNonLocalClass
+
+
+
+
+
+
+
 end ExtractAPITasty
 
 
@@ -492,7 +561,8 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
           tp.prefix
 
         // val prefix = tp.prefix
-        api.Projection.of(apiType(prefix), sym.name.toString)
+        // api.Projection.of(apiType(prefix), sym.name.toString)
+        api.Projection.of(apiThis(sym.owner), sym.name.toString)
       case tp: AppliedType =>
         val tycon = tp.tycon
         val args = tp.args
