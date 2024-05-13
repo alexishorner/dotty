@@ -494,5 +494,6 @@ private sealed trait YSettings:
 
   val YasyncTasty: Setting[Boolean] = BooleanSetting(ForkSetting, "Yasync-tasty", "TODO")
   val YcompareAsyncTasty: Setting[Boolean] = BooleanSetting(ForkSetting, "Ycompare-async-tasty", "TODO")
+  val YdisableExtractAPI: Setting[Boolean] = BooleanSetting(ForkSetting, "Ydisable-extract-api", "TODO")
 end YSettings
 

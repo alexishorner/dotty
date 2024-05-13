@@ -66,6 +66,15 @@ object Extensions:
   // end extension
   
   extension (sym: Symbol)(using Context)
+    @tailrec
+    private def fullNameList(currentSym: Symbol = sym, acc: List[Name] = Nil): List[Name] =
+      val newAcc = currentSym.name :: acc
+      if currentSym.owner == null then
+        newAcc
+      else
+        fullNameList(currentSym.owner, newAcc)
+    end fullNameList
+
     // TODO add separator
     def fullName: String =
       val b = new StringBuilder
@@ -80,26 +89,19 @@ object Extensions:
     end fullName
 
     def fullNameNoModuleClassSuffix: String =
-      @tailrec
-      def names(sym: Symbol, acc: List[Name]): List[Name] =
-        val newAcc = sym.name.stripModuleClassSuffix2 :: acc
-        if sym.owner == null then
-          newAcc
-        else
-          names(sym.owner, newAcc)
-      names(sym, Nil).filter(_ != nme.RootName).mkString(".")
+      sym.fullNameList().map(_.stripModuleClassSuffix2).filter(_ != nme.RootName).mkString(".")
     end fullNameNoModuleClassSuffix
 
-    def zincMangledName: String =
-      // if sym.isConstructor  then
-      //   // TODO: ideally we should avoid unnecessarily caching these Zinc specific
-      //   // names in the global chars array. But we would need to restructure
-      //   // ExtractDependencies caches to avoid expensive `toString` on
-      //   // each member reference.
-      //   termName(sym.owner.nn.fullName.mangledString.replace(".", ";").nn ++ ";init;")
-      // else
-      //   sym.name.stripModuleClassSuffix
-      sym.name.stripModuleClassSuffix2.toString // TODO implement
+    def zincMangledName: Name =
+      if sym.isConstructor  then
+        // TODO: ideally we should avoid unnecessarily caching these Zinc specific
+        // names in the global chars array. But we would need to restructure
+        // ExtractDependencies caches to avoid expensive `toString` on
+        // each member reference.
+        termName(sym.owner.nn.fullNameList().map(_.mangledString).mkString(";") ++ ";init;")
+      else
+        sym.name.stripModuleClassSuffix2
+      // sym.name.stripModuleClassSuffix2.toString // TODO implement
 
     def thisType: Prefix = sym match
       case sym: ClassSymbol => sym.thisType
@@ -170,8 +172,10 @@ object Extensions:
       predicateAs[ClassSymbol](_.openLevel == level)
     end hasOpenLevel
 
-    def isFinal: Boolean =
-      hasOpenLevel(OpenLevel.Final)
+    def isFinal: Boolean = sym match
+      case sym: ClassSymbol => sym.openLevel == OpenLevel.Final
+      case sym: TermOrTypeSymbol => sym.isFinalMember
+      case _ => false
     end isFinal
     
     def isSealed: Boolean =

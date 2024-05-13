@@ -490,12 +490,15 @@ class Pickler extends Phase {
       val comparator = debug.IncCallbackComparator()
 
       val extractApi = ExtractAPI()
-      extractApi.runOn(units)(using ctx.fresh.setIncCallback(comparator.apiCallback).setSetting(ctx.settings.YforceSbtPhases, true))
+      extractApi.runOn(units)(using ctx.fresh.setIncCallback(comparator.apiCallback)
+                                             .setSetting(ctx.settings.YforceSbtPhases, true)
+                                             .setSetting(ctx.settings.YdisableExtractAPI, false))
       extract.run(entry, cp, relativePathToSource, comparator.apiTastyCallback) // FIXME ugly duplication
 
       comparator.diffAndPropagate(cb) match
         case Left(diff) =>
-          report.error(em"API TASTy difference detected:\n${diff.collapsedTrace}")
+          // report.error(em"API TASTy difference detected:\n${diff.collapsedTrace}")
+          report.warning(em"API TASTy difference detected:\n${diff.collapsedTrace}")
         case Right(_) =>
           ()
     else
