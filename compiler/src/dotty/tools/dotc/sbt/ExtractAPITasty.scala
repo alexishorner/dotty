@@ -27,8 +27,10 @@ import tastyquery.Modifiers.Variance
 import core.Decorators.*
 import dotty.tools.io.FileWriters.ReadOnlyContext
 import dotty.tools.io.FileWriters.ctx as dottyCtx
+import dotty.tools.dotc.core.StdNames.str
 
 import java.util.concurrent.atomic.AtomicBoolean
+
 
 class ExtractAPITasty:
   val hasErrors: AtomicBoolean = AtomicBoolean() // TODO store errors to report them later
@@ -43,12 +45,15 @@ class ExtractAPITasty:
 
     symbol :: decls
 
-  def run(entry: ClasspathEntry, cp: Classpath, relativePathToDottySource: Map[String, SourceFile], cb: interfaces.IncrementalCallback | Null)(using ReadOnlyContext): Unit =
+  def runOn(entry: ClasspathEntry, cp: Classpath, relativePathToDottySource: Map[String, SourceFile],
+            cb: interfaces.IncrementalCallback | Null)(using ReadOnlyContext): Unit =
     def withIncCallback(op: interfaces.IncrementalCallback => Unit): Unit =
       if cb != null then
         op(cb)
        
     given Context = Context.initialize(cp)
+
+    val nonLocalClassSymbols = new mutable.HashMap[SourceFile, mutable.HashSet[ClassSymbol]]
 
     val symbols = ctx.findSymbolsByClasspathEntry(entry).toList
 
@@ -63,7 +68,7 @@ class ExtractAPITasty:
       withIncCallback: cb => 
         cb.startSource(source)
 
-      val apiTraverser = new ExtractAPITastyCollector
+      val apiTraverser = new ExtractAPITastyCollector(source, nonLocalClassSymbols)
       val classes = apiTraverser.apiSource(symbols)
       val mainClasses = apiTraverser.mainClasses
 
@@ -84,14 +89,20 @@ class ExtractAPITasty:
     
       if apiTraverser.hasErrors then
         hasErrors.set(true)
-  end run
+
+    withIncCallback(cb =>
+      recordNonLocalClasses(nonLocalClassSymbols, cb)
+      cb.apiPhaseCompleted()
+    )
+  end runOn
 
 
 
 
 
 
-  override def runOn(units: List[CompilationUnit])(using Context): List[CompilationUnit] =
+  def runOn(units: List[CompilationUnit])(using Context): List[CompilationUnit] =
+    ???
     // val doZincCallback = ctx.runZincPhases
     // val nonLocalClassSymbols = new mutable.HashSet[Symbol]
     // val units0 =
@@ -102,52 +113,52 @@ class ExtractAPITasty:
     //     units // still run the phase for the side effects (writing TASTy files to -Yearly-tasty-output)
     // if doZincCallback then
     //   ctx.withIncCallback(recordNonLocalClasses(nonLocalClassSymbols, _))
-    // if ctx.settings.YjavaTasty.value then
-    //   units0.filterNot(_.typedAsJava) // remove java sources, this is the terminal phase when `-Yjava-tasty` is set
+    // if ctx.settings.XjavaTasty.value then
+    //   units0.filterNot(_.typedAsJava) // remove java sources, this is the terminal phase when `-Xjava-tasty` is set
     // else
     //   units0
-    ???
   end runOn
 
-  private def recordNonLocalClasses(nonLocalClassSymbols: mutable.HashSet[Symbol], cb: interfaces.IncrementalCallback)(using Context): Unit =
-  //   for cls <- nonLocalClassSymbols do
-  //     val sourceFile = cls.source
-  //     if sourceFile.exists && cls.isDefinedInCurrentRun then
-  //       recordNonLocalClass(cls, sourceFile, cb)
-  //   ctx.run.nn.asyncTasty.foreach(_.signalAPIComplete())
-    ???
+  private def recordNonLocalClasses(nonLocalClassSymbols: mutable.HashMap[SourceFile, mutable.HashSet[ClassSymbol]], cb: interfaces.IncrementalCallback)(using Context)(using ReadOnlyContext): Unit =
+    for (sourceFile, clss) <- nonLocalClassSymbols do
+      if sourceFile.exists then
+        clss.foreach(recordNonLocalClass(_, sourceFile, cb))
+    // ctx.run.nn.asyncTasty.foreach(_.signalAPIComplete())
 
-  // private def recordNonLocalClass(cls: Symbol, sourceFile: SourceFile, cb: interfaces.IncrementalCallback)(using Context): Unit =
-  //   def registerProductNames(fullClassName: String, binaryClassName: String) =
-  //     val pathToClassFile = s"${binaryClassName.replace('.', java.io.File.separatorChar)}.class"
+  private def recordNonLocalClass(cls: ClassSymbol, sourceFile: SourceFile, cb: interfaces.IncrementalCallback)(using Context)(using ReadOnlyContext): Unit =
+    def registerProductNames(fullClassName: String, binaryClassName: String) =
+      import dotty.tools.io.JarArchive
+      val pathToClassFile = s"${binaryClassName.replace('.', java.io.File.separatorChar)}.class"
 
-  //     val classFile = {
-  //       ctx.settings.outputDir.value match {
-  //         case jar: JarArchive =>
-  //           // important detail here, even on Windows, Zinc expects the separator within the jar
-  //           // to be the system default, (even if in the actual jar file the entry always uses '/').
-  //           // see https://github.com/sbt/zinc/blob/dcddc1f9cfe542d738582c43f4840e17c053ce81/internal/compiler-bridge/src/main/scala/xsbt/JarUtils.scala#L47
-  //           new java.io.File(s"$jar!$pathToClassFile")
-  //         case outputDir =>
-  //           new java.io.File(outputDir.file, pathToClassFile)
-  //       }
-  //     }
+      val classFile = {
+        dottyCtx.settings.outputDir match {
+          case jar: JarArchive =>
+            // important detail here, even on Windows, Zinc expects the separator within the jar
+            // to be the system default, (even if in the actual jar file the entry always uses '/').
+            // see https://github.com/sbt/zinc/blob/dcddc1f9cfe542d738582c43f4840e17c053ce81/internal/compiler-bridge/src/main/scala/xsbt/JarUtils.scala#L47
+            new java.io.File(s"$jar!$pathToClassFile")
+          case outputDir =>
+            new java.io.File(outputDir.file, pathToClassFile)
+        }
+      }
 
-  //     cb.generatedNonLocalClass(sourceFile, classFile.toPath(), binaryClassName, fullClassName)
-  //   end registerProductNames
+      cb.generatedNonLocalClass(sourceFile, classFile.toPath(), binaryClassName, fullClassName)
+    end registerProductNames
 
-  //   val fullClassName = atPhase(sbtExtractDependenciesPhase) {
-  //     ExtractDependencies.classNameAsString(cls)
-  //   }
-  //   val binaryClassName = cls.binaryClassName
-  //   registerProductNames(fullClassName, binaryClassName)
+    // val fullClassName = atPhase(sbtExtractDependenciesPhase) {
+    //   ExtractDependencies.classNameAsString(cls)
+    // }
+    val fullClassName = cls.fullNameNoModuleClassSuffix
+    // val binaryClassName = cls.binaryClassName
+    val binaryClassName = cls.fullName // TODO
+    registerProductNames(fullClassName, binaryClassName)
 
-  //   // Register the names of top-level module symbols that emit two class files
-  //   val isTopLevelUniqueModule =
-  //     cls.owner.is(PackageClass) && cls.is(ModuleClass) && cls.companionClass == NoSymbol
-  //   if isTopLevelUniqueModule then
-  //     registerProductNames(fullClassName, binaryClassName.stripSuffix(str.MODULE_SUFFIX))
-  // end recordNonLocalClass
+    // Register the names of top-level module symbols that emit two class files
+    val isTopLevelUniqueModule =
+      /*cls.owner.is(PackageClass) && */cls.isModuleClass && cls.companionClass.isEmpty // TODO
+    if isTopLevelUniqueModule then
+      registerProductNames(fullClassName, binaryClassName.stripSuffix(str.MODULE_SUFFIX))
+  end recordNonLocalClass
 
 
 
@@ -158,7 +169,7 @@ class ExtractAPITasty:
 end ExtractAPITasty
 
 
-private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) extends ThunkHolder:
+private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols: mutable.HashMap[SourceFile, mutable.HashSet[ClassSymbol]])(using Context)(using ReadOnlyContext) extends ThunkHolder:
   import xsbti.api
 
   var hasErrors: Boolean = false
@@ -296,6 +307,8 @@ private class ExtractAPITastyCollector(using Context)(using ReadOnlyContext) ext
       childrenOfSealedClass, topLevel, tparams)
 
     allNonLocalClassesInSrc += cl
+    if !sym.isLocal then
+      nonLocalClassSymbols.getOrElseUpdate(source, mutable.HashSet.empty) += sym
 
     if (sym.hack_isStatic && !sym.isTrait && sym.hasMainMethod) {
        // If sym is an object, all main methods count, otherwise only @static ones count.

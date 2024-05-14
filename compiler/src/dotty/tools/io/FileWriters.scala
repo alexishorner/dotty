@@ -136,6 +136,7 @@ object FileWriters {
   trait ReadOnlySettings:
     def jarCompressionLevel: Int
     def debug: Boolean
+    def outputDir: AbstractFile
 
   trait ReadOnlyRun:
     def suspendedAtTyperPhase: Boolean
@@ -152,6 +153,7 @@ object FileWriters {
     def readSettings(using ctx: Context): ReadOnlySettings = new:
       val jarCompressionLevel = ctx.settings.XjarCompressionLevel.value
       val debug = ctx.settings.Ydebug.value
+      val outputDir = ctx.settings.outputDir.value
 
     def readRun(using ctx: Context): ReadOnlyRun = new:
       val suspendedAtTyperPhase = ctx.run.suspendedAtTyperPhase
