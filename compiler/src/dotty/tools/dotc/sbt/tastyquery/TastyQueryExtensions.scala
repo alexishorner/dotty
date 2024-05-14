@@ -154,6 +154,20 @@ object Extensions:
       sym.isStatic
     end hack_isStatic
 
+    /** Is this symbol directly owner by a term symbol, i.e., is it local to a block? */
+    def isLocalToBlock: Boolean =
+      val owner = sym.owner
+      owner != null && owner.isTerm
+
+    /** Is symbol directly or indirectly owned by a term symbol? */
+    @tailrec final def isLocal: Boolean = {
+      val owner = sym.owner
+      if (owner == null) false
+      else if (isLocalToBlock) true
+      else if (owner.isPackage) false
+      else owner.isLocal
+    }
+
     private inline def predicateAs[T <: Symbol](inline p: T => Boolean): Boolean = (sym: @unchecked) match
         case sym: T => p(sym)
         case _ => false
@@ -219,7 +233,6 @@ object Extensions:
     def isParamWithDefault: Boolean =
       predicateAs[TermSymbol](_.isParamWithDefault)
     end isParamWithDefault
-
   end extension
 
   extension(sym: ClassSymbol)(using Context)

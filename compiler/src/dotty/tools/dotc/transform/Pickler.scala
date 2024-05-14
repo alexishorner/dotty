@@ -493,7 +493,7 @@ class Pickler extends Phase {
       extractApi.runOn(units)(using ctx.fresh.setIncCallback(comparator.apiCallback)
                                              .setSetting(ctx.settings.YforceSbtPhases, true)
                                              .setSetting(ctx.settings.YdisableExtractAPI, false))
-      extract.run(entry, cp, relativePathToSource, comparator.apiTastyCallback) // FIXME ugly duplication
+      extract.runOn(entry, cp, relativePathToSource, comparator.apiTastyCallback) // FIXME ugly duplication
 
       comparator.diffAndPropagate(cb) match
         case Left(diff) =>
@@ -502,7 +502,7 @@ class Pickler extends Phase {
         case Right(_) =>
           ()
     else
-      extract.run(entry, cp, relativePathToSource, cb)
+      extract.runOn(entry, cp, relativePathToSource, cb)
 
     if extract.hasErrors.get() then
       report.error("Some errors happened during the Extract API TASTy phase")
