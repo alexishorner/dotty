@@ -36,7 +36,8 @@ class IncCallbackComparator:
                   cb.startSource(sourceFile)
                 case Api(sourceFile, classApi) => cb.api(sourceFile, classApi)
                 case MainClass(sourceFile, className) => cb.mainClass(sourceFile, className)
-                case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) => cb.generatedNonLocalClass(source, classFile, binaryClassName, srcClassName)
+                // case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) => cb.generatedNonLocalClass(source, classFile, binaryClassName, srcClassName)
+                case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) => ()
                 case NoResult => ()
 
       Left(diff)
