@@ -68,7 +68,8 @@ object Extensions:
   extension (sym: Symbol)(using Context)
     @tailrec
     private def fullNameList(currentSym: Symbol = sym, acc: List[Name] = Nil): List[Name] =
-      val newAcc = currentSym.name :: acc
+      val name = currentSym.name
+      val newAcc = if name == nme.RootName then acc else currentSym.name :: acc
       if currentSym.owner == null then
         newAcc
       else
@@ -77,19 +78,21 @@ object Extensions:
 
     // TODO add separator
     def fullName: String =
-      val b = new StringBuilder
-      def build(sym: Symbol): Unit = {
-        if (sym.owner != null)
-          build(sym.owner)
-          b append "."
-        b append sym.name 
-      }
-      build(sym)
-      b.toString
+      // val b = new StringBuilder
+      // def build(sym: Symbol): Unit = {
+      //   if (sym.owner != null)
+      //     build(sym.owner)
+      //     b append "."
+      //   b append sym.name 
+      // }
+      // build(sym)
+      // b.toString
+      fullNameList().mkString(".")
     end fullName
 
     def fullNameNoModuleClassSuffix: String =
-      sym.fullNameList().map(_.stripModuleClassSuffix2).filter(_ != nme.RootName).mkString(".")
+      // sym.fullNameList().map(_.stripModuleClassSuffix2).filter(_ != nme.RootName).mkString(".")
+      sym.fullNameList().map(_.stripModuleClassSuffix2).mkString(".")
     end fullNameNoModuleClassSuffix
 
     def zincMangledName: Name =
