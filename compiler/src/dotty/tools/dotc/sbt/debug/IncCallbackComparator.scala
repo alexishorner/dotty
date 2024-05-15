@@ -22,22 +22,22 @@ class IncCallbackComparator:
     val diff = IncDiff.groupIdentical(merged)
     if diff.hasDifferences then
 
-      val generatedNonLocalClasses = apiCallback.results.view.mapValues(v => v.filter(_.isInstanceOf[GeneratedNonLocalClass]))
+      // val generatedNonLocalClasses = apiCallback.results.view.mapValues(v => v.filter(_.isInstanceOf[GeneratedNonLocalClass]))
       
       if cb != null then // TODO remove
           for (source, results) <- apiTastyCallback.results do
             for result <- results do
               result match
                 case src @ StartSource(sourceFile) =>
-                  generatedNonLocalClasses(src).foreach { // TODO remove
-                    case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) =>
-                      cb.generatedNonLocalClass(source, classFile, binaryClassName, srcClassName)
-                  }
+                  // generatedNonLocalClasses(src).foreach { // TODO remove
+                  //   case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) =>
+                  //     cb.generatedNonLocalClass(source, classFile, binaryClassName, srcClassName)
+                  // }
                   cb.startSource(sourceFile)
                 case Api(sourceFile, classApi) => cb.api(sourceFile, classApi)
                 case MainClass(sourceFile, className) => cb.mainClass(sourceFile, className)
-                // case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) => cb.generatedNonLocalClass(source, classFile, binaryClassName, srcClassName)
-                case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) => ()
+                case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) => cb.generatedNonLocalClass(source, classFile, binaryClassName, srcClassName)
+                // case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) => ()
                 case NoResult => ()
 
       Left(diff)
