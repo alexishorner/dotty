@@ -54,7 +54,7 @@ class IncCallbackComparator:
 
   sealed trait IncDiffEntry
   case class Different(expected: String, actual: String) extends IncDiffEntry:
-    override def toString: String = s"Expected:\n$expected\nActual:\n$actual"
+    override def toString: String = s"Expected:\n$expected\nActual:\n$actual\n"
   end Different
   case class Identical(result: String) extends IncDiffEntry:
     override def toString: String = s"Identical value:\n$result"

@@ -30,6 +30,7 @@ import dotty.tools.io.FileWriters.ctx as dottyCtx
 import dotty.tools.dotc.core.StdNames.str
 
 import java.util.concurrent.atomic.AtomicBoolean
+import dotty.tools.dotc.printing.Formatting.ShownDef.Shown.runCtxShow
 
 
 class ExtractAPITasty:
@@ -67,6 +68,8 @@ class ExtractAPITasty:
     for (source, symbols) <- symbolsBySource do
       withIncCallback: cb => 
         cb.startSource(source)
+
+        symbols.foreach(s => dottyCtx.reporter.log(s.tree.get.showMultiline))
 
       val apiTraverser = new ExtractAPITastyCollector(source, nonLocalClassSymbols)
       val classes = apiTraverser.apiSource(symbols)
@@ -273,6 +276,8 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       else if (sym.isModuleClass) {
         // TODO PackageClass is when we have package object
         // TODO look at name
+        // Instance of PackageSymbol
+        // top level class (owner is a package symbol) that is a module class with the name ending in package or $package
         dt.Module // TODO figure out PackageClass
         // if (sym.is(PackageClass)) dt.PackageModule
         // else dt.Module
@@ -521,7 +526,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       assert(sym.isAbstractMember || sym.isAbstractClass || sym.isInstanceOf[TypeParamSymbol]) // TODO check
       api.TypeDeclaration.of(name, access, modifiers, as.toArray, typeParams, apiType(tpe.bounds.low), apiType(tpe.bounds.high))
     }
-    api.TypeAlias.of(name, access, modifiers, as.toArray, typeParams, Constants.emptyType)
+    // api.TypeAlias.of(name, access, modifiers, as.toArray, typeParams, Constants.emptyType)
   }
 
   // Hack to represent dotty types which don't have an equivalent in xsbti
@@ -665,8 +670,8 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       case tp: OrType =>
         val s = combineApiTypes(apiType(tp.first), apiType(tp.second))
         withMarker(s, orMarker)
-      // case ExprType(resultType) =>
-      //   withMarker(apiType(resultType), byNameMarker)
+      case tp: ByNameType =>
+        withMarker(apiType(tp.resultType), byNameMarker)
       case tp: MatchType =>
         ???
         // val bound = tp.bound
