@@ -484,7 +484,8 @@ class Pickler extends Phase {
     val extract = ExtractAPITasty()
     val cb = ctx.incCallback
 
-    given ReadOnlyContext = if useExecutor then ReadOnlyContext.buffered else ReadOnlyContext.eager // TODO maybe avoid duplication of this line with a method
+    // given ReadOnlyContext = if useExecutor then ReadOnlyContext.buffered else ReadOnlyContext.eager // TODO maybe avoid duplication of this line with a method
+    given ReadOnlyContext = ReadOnlyContext.eager // TODO remove
     
     if ctx.settings.YcompareAsyncTasty.value then
       val comparator = debug.IncCallbackComparator()
@@ -492,6 +493,7 @@ class Pickler extends Phase {
       val extractApi = ExtractAPI()
       extractApi.runOn(units)(using ctx.fresh.setIncCallback(comparator.apiCallback)
                                              .setSetting(ctx.settings.YforceSbtPhases, true)
+                                             .setSetting(ctx.settings.YasyncTasty, false)
                                              .setSetting(ctx.settings.YdisableExtractAPI, false))
       extract.runOn(entry, cp, relativePathToSource, comparator.apiTastyCallback) // FIXME ugly duplication
 
