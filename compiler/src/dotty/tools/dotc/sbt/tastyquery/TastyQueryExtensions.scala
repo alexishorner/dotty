@@ -69,7 +69,10 @@ object Extensions:
     @tailrec
     private def fullNameList(currentSym: Symbol = sym, acc: List[Name] = Nil): List[Name] =
       val name = currentSym.name
-      val newAcc = if name == nme.RootName then acc else currentSym.name :: acc
+      val newAcc =
+        if name == nme.RootName || name == nme.EmptyPackageName then
+          acc
+        else currentSym.name :: acc
       if currentSym.owner == null then
         newAcc
       else
