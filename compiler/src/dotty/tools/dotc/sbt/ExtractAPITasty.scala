@@ -298,7 +298,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     val acc = apiAccess(sym)
     val modifiers = apiModifiers(sym)
     val anns = apiAnnotations(sym, inlineOrigin = None).toArray
-    val topLevel = sym.isTopLevelClass
+    val topLevel = sym.isTopLevel
     // TODO CHECK: does sealedChildren include this
     //     ANSWER: no, it doesn't
     val childrenOfSealedClass = sym.sealedDescendants.sorted(classFirstSort).map(c =>
