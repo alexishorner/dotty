@@ -203,6 +203,12 @@ object Extensions:
       hasOpenLevel(OpenLevel.Sealed)
     end isSealed
 
+    def hack_isPackageClass: Boolean =
+      predicateAs[ClassSymbol](sym => 
+        sym.isTopLevel && sym.isModuleClass && sym.name.isPackageObjectClassName
+      )
+    end hack_isPackageClass
+
     // `TermSymbol` predicates
 
     def isAbstractOverride: Boolean =

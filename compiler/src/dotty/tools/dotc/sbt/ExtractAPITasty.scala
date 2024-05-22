@@ -158,7 +158,7 @@ class ExtractAPITasty:
 
     // Register the names of top-level module symbols that emit two class files
     val isTopLevelUniqueModule =
-      /*cls.owner.is(PackageClass) && */cls.isModuleClass && cls.companionClass.isEmpty // TODO
+      cls.owner.hack_isPackageClass && cls.isModuleClass && cls.companionClass.isEmpty // TODO
     if isTopLevelUniqueModule then
       registerProductNames(fullClassName, binaryClassName.stripSuffix(str.MODULE_SUFFIX))
   end recordNonLocalClass
@@ -278,9 +278,9 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
         // TODO look at name
         // Instance of PackageSymbol
         // top level class (owner is a package symbol) that is a module class with the name ending in package or $package
-        dt.Module // TODO figure out PackageClass
-        // if (sym.is(PackageClass)) dt.PackageModule
-        // else dt.Module
+        // dt.Module // TODO figure out PackageClass
+        if (sym.hack_isPackageClass) dt.PackageModule
+        else dt.Module
       } else dt.ClassDef
 
     val selfType = apiType(sym.givenSelfType.orNull)
