@@ -681,7 +681,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
         // withMarker(s, matchMarker)
       case tp: ConstantType =>
         val constant = tp.value
-        api.Constant.of(apiType(constant.typeValue), constant.stringValue)
+        api.Constant.of(apiType(constant.wideType), constant.stringValue)
       case tp: AnnotatedType =>
         val tpe = tp.typ
         val annot = tp.annotation

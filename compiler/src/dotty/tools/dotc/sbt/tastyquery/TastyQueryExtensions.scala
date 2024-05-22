@@ -11,7 +11,7 @@ import Bridge.*
 import scala.annotation.tailrec
 
 object CommonNames:
-  val main: TermName = termName("main")
+  val main: SimpleName = termName("main")
   val pkg: TermName = termName("package")
 end CommonNames
 
@@ -316,11 +316,21 @@ object Extensions:
     end sealedDescendants
 
     def hasMainMethod: Boolean =
-      sym.getMember(CommonNames.main) match
-        case Some(main) =>
-          main.isMainMethod && (sym.isModuleClass || sym.isStatic)
-        case None => false
-      end match
+      // import Signatures.*
+      // val arraySignatureName = defn.ArrayClass.signatureName
+      // val main = SignedName(CommonNames.main, Signature(List(ParamSig.Term(arraySignatureName)), defn.UnitClass.signatureName))
+      // sym.getMember(main) match
+      //   case Some(main) =>
+      //     main.isMainMethod && (sym.isModuleClass || sym.isStatic)
+      //   case None => false
+      // end match
+
+      // TODO implement with getMember or getDecl
+      (sym.isModuleClass || sym.isStatic) &&
+        sym.declarations.exists {
+          case decl: TermSymbol => decl.isMainMethod
+          case _ => false
+        }
     end hasMainMethod
 
     def hack_isDerivedValueClass: Boolean =
@@ -336,7 +346,7 @@ object Extensions:
     def isMainMethod: Boolean =
       (sym.name == CommonNames.main) && (sym.declaredType match {
         case MethodTypeExtractor(_, List(el), restpe) =>
-          (el isSameType defn.StringType) && (restpe isTypeRefOf defn.UnitClass)
+          (el isSameType defn.ArrayTypeOf(defn.StringType)) && (restpe isTypeRefOf defn.UnitClass)
         case _ => false
       })
     end isMainMethod
