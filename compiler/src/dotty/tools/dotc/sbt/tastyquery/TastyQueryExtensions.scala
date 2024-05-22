@@ -246,6 +246,10 @@ object Extensions:
     def isParamWithDefault: Boolean =
       predicateAs[TermSymbol](_.isParamWithDefault)
     end isParamWithDefault
+
+    def isParamAccessor: Boolean =
+      predicateAs[TermSymbol](_.isParamAccessor)
+    end isParamAccessor
   end extension
 
   extension(sym: ClassSymbol)(using Context)

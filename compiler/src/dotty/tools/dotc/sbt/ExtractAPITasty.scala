@@ -327,15 +327,16 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     val bases = {
       val ancestorTypes0 = linearizedAncestorTypes(csym)
       // TODO handle value classes
-      // if (csym.hack_isDerivedValueClass) { // TODO (later) reimplement from ErasedValueClass
-      //   val underlying = ValueClasses.valueClassUnbox(csym).info.finalResultType
-      //   // The underlying type of a value class should be part of the name hash
-      //   // of the value class (see the test `value-class-underlying`), this is accomplished
-      //   // by adding the underlying type to the list of parent types.
-      //   underlying :: ancestorTypes0
-      // } else
-      //   ancestorTypes0
-      ancestorTypes0
+      if (csym.hack_isDerivedValueClass) { // TODO (later) reimplement from ErasedValueClass
+        // val underlying = ValueClasses.valueClassUnbox(csym).info.finalResultType
+        val underlying = csym.declarations.find(_.isParamAccessor).get.localRef.finalResultType // TODO check
+        // The underlying type of a value class should be part of the name hash
+        // of the value class (see the test `value-class-underlying`), this is accomplished
+        // by adding the underlying type to the list of parent types.
+        underlying :: ancestorTypes0
+      } else
+        ancestorTypes0
+      // ancestorTypes0
     }
 
     val apiBases = bases.map(apiType)
