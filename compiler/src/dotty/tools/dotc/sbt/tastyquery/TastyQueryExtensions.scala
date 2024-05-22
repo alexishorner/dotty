@@ -147,9 +147,10 @@ object Extensions:
       sym.name == nme.Constructor // FIXME why do we need `Names` prefix ?
     end isConstructor
     
-    def isTopLevelClass: Boolean =
-      true // TODO implement (owner is package)
-    end isTopLevelClass
+    def isTopLevel: Boolean =
+      val owner = sym.owner
+      owner != null && owner.isPackage
+    end isTopLevel
 
     def hack_isOverride: Boolean =
       sym.is(Override)
