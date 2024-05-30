@@ -429,7 +429,7 @@ class Pickler extends Phase {
     val entryDebugString = sourceroot
 
     val packagePrefixesAndData = result.flatMap(
-      _.pickled.map(
+      _.pickled.toList.map(
         (cls, tsty) => {
           // val className = cls.fullName.toString()
           // val pkgName = cls.owner.fullName.toString()
@@ -513,12 +513,9 @@ class Pickler extends Phase {
     // FIXME remove hack
     import java.io.PrintWriter
     import dotty.tools.io.File
-    for (source, classes) <- extract.mySourceAndClasses do
-      if (ctx.settings.YdumpSbtInc.value) {
-        // Append to existing file that should have been created by ExtractDependencies
+    if ctx.settings.YdumpSbtInc.value then
+      for (source, classes) <- extract.mySourceAndClasses do
         classes.foreach(source => report.echo(DefaultShowAPI(source)))
-      }
-    end for
 
     result
   }

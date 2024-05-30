@@ -14,6 +14,7 @@ import tastyquery.Constants.*
 import tastyquery.SourceLanguage
 import tastyquery.Modifiers.*
 import tastyquery.SourcePosition
+import tastyquery.Exceptions.UnknownClasspathEntry
 
 import tastyquery.Extensions.*
 
@@ -31,6 +32,7 @@ import dotty.tools.dotc.core.StdNames.str
 
 import java.util.concurrent.atomic.AtomicBoolean
 import dotty.tools.dotc.printing.Formatting.ShownDef.Shown.runCtxShow
+import dotty.tools.dotc.typer.ErrorReporting.err
 
 
 class ExtractAPITasty:
@@ -56,7 +58,11 @@ class ExtractAPITasty:
 
     val nonLocalClassSymbols = new mutable.HashMap[SourceFile, mutable.HashSet[ClassSymbol]]
 
-    val symbols = ctx.findSymbolsByClasspathEntry(entry).toList
+    val symbols =
+      try // Workaround, because tastyquery does not add entries with no packages to its lookup
+        ctx.findSymbolsByClasspathEntry(entry).toList
+      catch case e: UnknownClasspathEntry =>
+        Nil
 
     val paths = symbols.map(_.tree.get.pos.sourceFile.path).toList
 
@@ -69,22 +75,11 @@ class ExtractAPITasty:
       withIncCallback: cb => 
         cb.startSource(source)
 
-        symbols.foreach(s => dottyCtx.reporter.log(s.tree.get.showMultiline))
-
       val apiTraverser = new ExtractAPITastyCollector(source, nonLocalClassSymbols)
       val classes = apiTraverser.apiSource(symbols)
       val mainClasses = apiTraverser.mainClasses
 
       mySourceAndClasses ::= (source, classes)
-
-    // if (ctx.settings.YdumpSbtInc.value) {
-    //   // Append to existing file that should have been created by ExtractDependencies
-    //   val pw = new PrintWriter(File(sourceFile.file.jpath).changeExtension("inc").toFile
-    //     .bufferedWriter(append = true), true)
-    //   try {
-    //     classes.foreach(source => pw.println(DefaultShowAPI(source)))
-    //   } finally pw.close()
-    // }
 
       withIncCallback: cb =>
         classes.foreach(cb.api(source, _))
@@ -97,29 +92,6 @@ class ExtractAPITasty:
       recordNonLocalClasses(nonLocalClassSymbols, cb)
       cb.apiPhaseCompleted()
     )
-  end runOn
-
-
-
-
-
-
-  def runOn(units: List[CompilationUnit])(using Context): List[CompilationUnit] =
-    ???
-    // val doZincCallback = ctx.runZincPhases
-    // val nonLocalClassSymbols = new mutable.HashSet[Symbol]
-    // val units0 =
-    //   if doZincCallback && /*!ctx.settings.YasyncTasty.value*/ !ctx.settings.YdisableExtractAPI.value then
-    //     val ctx0 = ctx.withProperty(NonLocalClassSymbolsInCurrentUnits, Some(nonLocalClassSymbols))
-    //     super.runOn(units)(using ctx0)
-    //   else
-    //     units // still run the phase for the side effects (writing TASTy files to -Yearly-tasty-output)
-    // if doZincCallback then
-    //   ctx.withIncCallback(recordNonLocalClasses(nonLocalClassSymbols, _))
-    // if ctx.settings.XjavaTasty.value then
-    //   units0.filterNot(_.typedAsJava) // remove java sources, this is the terminal phase when `-Xjava-tasty` is set
-    // else
-    //   units0
   end runOn
 
   private def recordNonLocalClasses(nonLocalClassSymbols: mutable.HashMap[SourceFile, mutable.HashSet[ClassSymbol]], cb: interfaces.IncrementalCallback)(using Context)(using ReadOnlyContext): Unit =
@@ -192,7 +164,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
 
   /** Report an internal error in incremental compilation. */
   private def internalError(msg: => String, pos: SourcePosition = SourcePosition.NoPosition): Unit = // TODO move method
-    error(s"Internal error in the incremental compiler while compiling ${"<TODO add source file>"}: $msg", pos)
+    error(s"Internal error in the incremental compiler while compiling ${source}: $msg", pos)
 
   /** This cache is necessary for correctness, see the comment about inherited
    *  members in `apiClassStructure`
@@ -545,7 +517,15 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     // sbt main class discovery relies on the signature of the main
     // method being fully dealiased. See https://github.com/sbt/zinc/issues/102
     // val tp2 = if (!tp.isLambdaSub) tp.dealiasKeepAnnots else tp
-    val tp2 = if tp != null && !tp.hack_isLambdaSub && tp != defn.SyntacticNothingType /*FIXME workaround to avoid infinite recursion*/ then tp.hack_dealiasKeepAnnots else tp // FIXME isLambdaSub is private
+    
+    val tp2 = try
+      if tp != null && !tp.hack_isLambdaSub && tp != defn.SyntacticNothingType /*FIXME workaround to avoid infinite recursion*/ then tp.hack_dealiasKeepAnnots else tp // FIXME isLambdaSub is private
+    catch
+      case e => 
+        error(s"Error in computeType: $source, $tp")
+        error(e.toString)
+        error(e.getStackTrace.mkString("\n"))
+        null
     // val tp2 = tp
     tp2 match { // TODO add more cases
       case NoPrefix /*| NoType*/ | null =>

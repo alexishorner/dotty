@@ -204,9 +204,10 @@ object Extensions:
     end isSealed
 
     def hack_isPackageClass: Boolean =
-      predicateAs[ClassSymbol](sym => 
-        sym.isTopLevel && sym.isModuleClass && sym.name.isPackageObjectClassName
-      )
+      sym.isPackage // FIXME difference between Package and PackageClass
+      // predicateAs[ClassSymbol](sym => 
+      //   sym.isTopLevel && sym.isModuleClass && sym.name.isPackageObjectClassName
+      // )
     end hack_isPackageClass
 
     // `TermSymbol` predicates
@@ -327,7 +328,7 @@ object Extensions:
     end sealedDescendants
 
     def hasMainMethod: Boolean =
-      // import Signatures.*
+      import Signatures.*
       // val arraySignatureName = defn.ArrayClass.signatureName
       // val main = SignedName(CommonNames.main, Signature(List(ParamSig.Term(arraySignatureName)), defn.UnitClass.signatureName))
       // sym.getMember(main) match

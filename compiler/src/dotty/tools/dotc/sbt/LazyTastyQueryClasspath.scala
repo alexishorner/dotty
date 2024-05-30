@@ -34,8 +34,8 @@ object LazyTastyQueryClasspath:
       Option(dir.lookupName(name, directory = false))
 
     lazy val _packages: List[DotcPackageData] =
-      def loadClasses(pkg: PackageEntry): List[DotcClassData] =
-        cp.classes(pkg.name).toList.map(cls =>
+      def loadClasses(pkgName: String): List[DotcClassData] =
+        cp.classes(pkgName).toList.map(cls =>
           val binary = cls.binary
           val suffix = binary.flatMap(_.name.split('.').lastOption)
           val (classRaw, tastyRaw) = suffix match
@@ -46,15 +46,18 @@ object LazyTastyQueryClasspath:
             case _ =>
               (None, None)
           
-          DotcClassData(s"$debugName:${pkg.name}.${cls.name}", cls.name, classRaw, tastyRaw)
+          val clsFullName = if pkgName.isEmpty() then cls.name else s"${pkgName}.${cls.name}"
+          DotcClassData(s"$debugName:$clsFullName", cls.name, classRaw, tastyRaw)
         )
 
-      def loadPackage(pkg: PackageEntry): DotcPackageData =
-        val name = pkg.name
-        DotcPackageData(s"$debugName:$name", name, () => loadClasses(pkg))
+      def loadPackage(name: String): DotcPackageData =
+        DotcPackageData(s"$debugName:$name", name, () => loadClasses(name))
+
       def loadSubPackages(name: String): List[DotcPackageData] =
-        cp.packages(name).toList.flatMap(pkg => loadPackage(pkg) :: loadSubPackages(pkg.name))
-      loadSubPackages("")
+        cp.packages(name).toList.flatMap(pkg => loadPackage(pkg.name) :: loadSubPackages(pkg.name))
+      
+      val emptyPkgName = ""
+      loadPackage(emptyPkgName) :: loadSubPackages(emptyPkgName)
 
     override def listAllPackages(): List[DotcPackageData] = _packages
   end DotcEntry
@@ -132,6 +135,7 @@ object LazyTastyQueryClasspath:
     def flattenClasspath(cp: ClassPath): List[ClassPath] = cp match
       case ag: AggregateClassPath => ag.aggregates.flatMap(flattenClasspath).toList
       case _ => List(cp)
+    val cp = ctx.base.platform.classPath
     flattenClasspath(ctx.base.platform.classPath).map(cp => DotcEntry(cp.asClassPathString, cp))
   
 end LazyTastyQueryClasspath
