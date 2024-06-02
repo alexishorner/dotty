@@ -419,7 +419,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
         marker(s"${MurmurHash3.finalizeHash(h, "inlineExtras".hashCode)}")
       }
 
-    def tparamList(pt: TypeLambda): List[api.TypeParameter] =
+    def tparamList(pt: TypeLambdaType): List[api.TypeParameter] =
       pt.paramNames.lazyZip(pt.paramInfos).map((pname, pbounds) =>
         apiTypeParameter(pname.toString, Variance.Invariant, pbounds.low, pbounds.high)
       )
@@ -437,7 +437,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       api.ParameterList.of(apiParams.toArray, mt.isImplicitOrContextual)
 
     def paramLists(t: TypeOrMethodic, paramss: List[ParamSymbolsClause]): List[api.ParameterList] = t match {
-      case pt: TypeLambda =>
+      case pt: TypeLambdaType =>
         paramLists(pt.resultType, paramss.drop(1))
       case mt: MethodType =>
         val pnames = mt.paramNames
@@ -453,7 +453,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
 
     /** returns list of pairs of 1: the position in all parameter lists, and 2: a type parameter list */
     def tparamLists(t: TypeOrMethodic, index: Int): List[(Int, List[api.TypeParameter])] = t match
-      case pt: TypeLambda =>
+      case pt: TypeLambdaType =>
         (index, tparamList(pt)) :: tparamLists(pt.resultType, index + 1)
       case mt: MethodType =>
         tparamLists(mt.resultType, index + 1)
@@ -461,7 +461,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
         Nil
 
     val (tparams, tparamsExtras) = sym.declaredType match
-      case pt: TypeLambda =>
+      case pt: TypeLambdaType =>
         (tparamList(pt), tparamLists(pt.resultType, index = 1))
       case mt: MethodType =>
         (Nil, tparamLists(mt.resultType, index = 1))
@@ -680,6 +680,11 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       //   apiType(tp.ref)
       // case tp: TypeVar =>
       //   apiType(tp.underlying)
+      case tp: RepeatedType =>
+        val apiPrefix = apiThis(defn.scalaPackage.packageRef.symbol)
+        val apiTycon = api.Projection.of(apiPrefix, tpnme.RepeatedParamClassMagic.toString)
+        val apiArg = apiType(tp.elemType)
+        api.Parameterized.of(apiTycon, Array(apiArg))
       case tp: SuperType =>
         val thistpe = tp.thistpe
         val supertpe = tp.underlying
