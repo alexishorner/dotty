@@ -537,31 +537,28 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
             .map(_.asInstanceOf[api.PathComponent])
         api.Singleton.of(api.Path.of(pathComponents)) // TODO add Constants.thisPath
       case tp: NamedType =>
-        // val sym = tp.localSymbol
-        val sym = tp.optSymbol.get
-        // A type can sometimes be represented by multiple different NamedTypes
-        // (they will be `=:=` to each other, but not `==`), and the compiler
-        // may choose to use any of these representation, there is no stability
-        // guarantee. We avoid this instability by always normalizing the
-        // prefix: if it's a package, if we didn't do this sbt might conclude
-        // that some API changed when it didn't, leading to overcompilation
-        // (recompiling more things than what is needed for incremental
-        // compilation to be correct).
-
-        // val prefix = if (sym.maybeOwner.is(Package)) // { type T } here T does not have an owner
-        //   sym.owner.thisType
-        // else
-        //   tp.prefix
-
-        // FIXME is not wrapped in a ThisType, because prefix is a package instead of a module class
-        val prefix = if (sym.owner.isPackage) // { type T } here T does not have an owner
-          sym.owner.asPackage.packageRef // TODO check if this is correct
-        else
-          tp.prefix
-
-        // val prefix = tp.prefix
-        // api.Projection.of(apiType(prefix), sym.name.toString)
-        api.Projection.of(apiThis(sym.owner), sym.name.toString)
+        val optSym = tp.optSymbol
+        val (apiPrefix, name) =
+          if optSym.isEmpty then
+            (apiType(tp.prefix), "<none>")
+          else
+            val sym = optSym.get
+            val owner = sym.owner
+            // A type can sometimes be represented by multiple different NamedTypes
+            // (they will be `=:=` to each other, but not `==`), and the compiler
+            // may choose to use any of these representation, there is no stability
+            // guarantee. We avoid this instability by always normalizing the
+            // prefix: if it's a package, if we didn't do this sbt might conclude
+            // that some API changed when it didn't, leading to overcompilation
+            // (recompiling more things than what is needed for incremental
+            // compilation to be correct).
+            val apiPrefix =
+              if owner.isPackage then // { type T } here T does not have an owner
+                apiThis(owner)
+              else
+                apiType(tp.prefix)
+            (apiPrefix, sym.name.toString) // TODO check
+        api.Projection.of(apiPrefix, name)
       case tp: AppliedType =>
         val tycon = tp.tycon
         val args = tp.args
