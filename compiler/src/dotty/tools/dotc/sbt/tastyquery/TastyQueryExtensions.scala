@@ -327,6 +327,22 @@ object Extensions:
       sym :: sym.sealedStrictDescendants
     end sealedDescendants
 
+    def hack_findMember(pred: TermOrTypeSymbol => Boolean): Option[TermOrTypeSymbol] =
+      @tailrec
+      def lookup(lin: List[ClassSymbol]): Option[TermOrTypeSymbol] = lin match
+        case parentCls :: linRest =>
+          val res = parentCls.declarations.find(sym => !sym.isPrivate && pred(sym))
+          if res.isDefined then res
+          else lookup(linRest)
+        case Nil =>
+          None
+      end lookup
+
+      sym.declarations.find(pred).orElse(
+        lookup(sym.linearization.tail)
+      )
+    end hack_findMember
+
     def hasMainMethod: Boolean =
       import Signatures.*
       // val arraySignatureName = defn.ArrayClass.signatureName
@@ -339,10 +355,10 @@ object Extensions:
 
       // TODO implement with getMember or getDecl
       (sym.isModuleClass || sym.isStatic) &&
-        sym.declarations.exists {
+        sym.hack_findMember {
           case decl: TermSymbol => decl.isMainMethod
           case _ => false
-        }
+        }.isDefined
     end hasMainMethod
 
     def hack_isDerivedValueClass: Boolean =
