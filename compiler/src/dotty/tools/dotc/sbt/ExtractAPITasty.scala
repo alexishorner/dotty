@@ -185,6 +185,11 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
    */
   private val seenInlineCache = mutable.HashSet.empty[Symbol]
 
+  /** This cache is optional, it avoids recomputing hashes of inline "Body" annotations,
+   *  e.g. when a concrete inline method is inherited by a subclass.
+   */
+  private val inlineBodyCache = mutable.HashMap.empty[Symbol, Int]
+
   private val allNonLocalClassesInSrc = new mutable.HashSet[xsbti.api.ClassLike]
   private val _mainClasses = new mutable.HashSet[String]
 
@@ -794,24 +799,31 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
    */
   def apiAnnotations(s: Symbol, inlineOrigin: Option[Symbol]): List[api.Annotation] = {
     val annots = new mutable.ListBuffer[api.Annotation]
-    // val inlineBody = Inlines.bodyToInline(s)
-    // if !inlineBody.isEmpty then
-    //   // If the body of an inline def changes, all the reverse dependencies of
-    //   // this method need to be recompiled. sbt has no way of tracking method
-    //   // bodies, so we include the hash of the body of the method as part of the
-    //   // signature we send to sbt.
+    if s.name.toString.contains("Inline") then
+      val dummy = 42
+    val inlineBodyOpt = s.hack_bodyToInline
+    if !inlineBodyOpt.isEmpty then
+      val inlineBody = inlineBodyOpt.get
+      // If the body of an inline def changes, all the reverse dependencies of
+      // this method need to be recompiled. sbt has no way of tracking method
+      // bodies, so we include the hash of the body of the method as part of the
+      // signature we send to sbt.
 
-    //   def hash[U](inlineOrigin: Option[Symbol]): Int =
-    //     assert(seenInlineCache.add(s)) // will fail if already seen, guarded by treeHash
-    //     treeHash(inlineBody, inlineOrigin)
+      def hash[U](inlineOrigin: Option[Symbol]): Int =
+        assert(seenInlineCache.add(s)) // will fail if already seen, guarded by treeHash
+        treeHash(inlineBody, inlineOrigin)
 
-    //   val inlineHash =
-    //     if inlineOrigin.exists then hash(inlineOrigin)
-    //     else inlineBodyCache.getOrElseUpdate(s, hash(inlineOrigin = s).tap(_ => seenInlineCache.clear()))
+      val inlineHash =
+        if inlineOrigin.isDefined then hash(inlineOrigin)
+        else inlineBodyCache.getOrElseUpdate(s, {
+            val res = hash(inlineOrigin = Some(s))
+            seenInlineCache.clear()
+            res
+          }
+        )
 
-    //   annots += marker(inlineHash.toString)
-
-    // end if
+      annots += marker(inlineHash.toString)
+    end if
 
     // In the Scala2 ExtractAPI phase we only extract annotations that extend
     // StaticAnnotation, but in Dotty we currently pickle all annotations so we
@@ -822,11 +834,14 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     //   `api.ClassLike#childrenOfSealedClass` and adding this annotation would
     //   lead to overcompilation when using zinc's
     //   `IncOptions#useOptimizedSealed`.
+    import tastyquery.MyDefinitions
     s.annotations.foreach { annot =>
       val sym = annot.symbol
       // if sym.exists && sym != defn.BodyAnnot && sym != defn.ChildAnnot then
       //   annots += apiAnnotation(annot)
-      if sym.sourceLanguage != SourceLanguage.Java then // FIXME workaround for Java annotations
+      if sym != MyDefinitions.internalBodyAnnotClass &&
+         sym != MyDefinitions.internalChildAnnotClass &&
+         sym.sourceLanguage != SourceLanguage.Java then // FIXME workaround for Java annotations
         annots += apiAnnotation(annot)
     }
 
@@ -914,12 +929,15 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
             h = positionedHash(p, h)
           case xs: List[?] =>
             h = iteratorHash(xs.iterator, h)
+          case e: (Either[?, ?] | Option[?]) =>
+            h = iteratorHash(e.productIterator, h)
           case c: Constant =>
             h = constantHash(c, h)
           case n: NamedType =>
             h = nameHash(n.name, h)
           case n: Name =>
             h = nameHash(n, h)
+          case _: (Symbol | Type) =>
           case elem =>
             cannotHash(what = s"`${elem}` of unknown class ${elem.getClass}", elem, tree)
       h

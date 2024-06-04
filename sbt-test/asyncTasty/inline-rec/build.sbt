@@ -1,7 +1,7 @@
 import sbt.internal.inc.Analysis
 import complete.DefaultParsers._
 
-scalacoptions += "-Yasync-tasty"
+scalacOptions += "-Yasync-tasty"
 
 // Reset compiler iterations, necessary because tests run in batch mode
 val recordPreviousIterations = taskKey[Unit]("Record previous iterations.")

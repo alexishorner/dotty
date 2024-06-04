@@ -5,6 +5,7 @@ import Symbols.*
 import Types.*
 import Names.*
 import Modifiers.*
+import Trees.*
 
 import Bridge.*
 
@@ -14,6 +15,14 @@ object CommonNames:
   val main: SimpleName = termName("main")
   val pkg: TermName = termName("package")
 end CommonNames
+
+object MyDefinitions:
+  def internalBodyAnnotClass(using Context) =
+    defn.scalaAnnotationInternalPackage.getDecl(typeName("Body")).get.asClass
+  
+  def internalChildAnnotClass(using Context) =
+    defn.internalChildAnnotClass.get
+end MyDefinitions
 
 object Extensions: 
   extension (name: Name)(using Context)
@@ -124,6 +133,21 @@ object Extensions:
         result
       }
     }
+
+    /** `sym` is an inline method with a known body to inline.
+     */
+    def hack_hasBodyToInline: Boolean =
+      sym.isInline && sym.isMethod/* && sym.hasAnnotation(MyDefinitions.internalBodyAnnotClass)*/
+
+    /** The body to inline for method `sym`, or `EmptyTree` if none exists.
+     *  @pre  hasBodyToInline(sym)
+     */
+    def hack_bodyToInline: Option[Tree] =
+      if sym.hack_hasBodyToInline then
+        // Some(sym.getAnnotation(MyDefinitions.internalBodyAnnotClass).get.tree)
+        Some(sym.tree.get.asInstanceOf[DefDef].rhs.get)
+      else
+        None
 
     /** Is this symbol the root class or its companion object? */
     def isRoot: Boolean =
@@ -243,6 +267,10 @@ object Extensions:
     def isInline: Boolean =
       predicateAs[TermSymbol](_.isInline)
     end isInline
+
+    def isMethod: Boolean =
+      predicateAs[TermSymbol](_.isMethod)
+    end isMethod
 
     def isParamWithDefault: Boolean =
       predicateAs[TermSymbol](_.isParamWithDefault)
