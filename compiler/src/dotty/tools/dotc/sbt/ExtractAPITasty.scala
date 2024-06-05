@@ -58,6 +58,9 @@ class ExtractAPITasty:
 
     val nonLocalClassSymbols = new mutable.HashMap[SourceFile, mutable.HashSet[ClassSymbol]]
 
+    // FIXME Macros:
+    //   tastyquery.Exceptions$TastyFormatException:
+    //     Unexpected term tag UnknownTag(179) at address Addr(106) in file Macro
     val symbols =
       try // Workaround, because tastyquery does not add entries with no packages to its lookup
         ctx.findSymbolsByClasspathEntry(entry).toList
