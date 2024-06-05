@@ -426,9 +426,8 @@ object Extensions:
     /** Is this type a (neither aliased nor applied nor annotated) reference to class `sym`? */
     def isDirectRef(sym: Symbol): Boolean = tpe match // TODO check stripTypeVar
       case this1: TypeRef =>
-        this1.name == sym.name
-        // this1.name == sym.name && // avoid forcing resolve if names differ
-        // this1.optSymbol.exists(_ eq sym)
+        this1.name == sym.name && // avoid forcing resolve if names differ
+        this1.optSymbol.exists(_ eq sym)
       case _ =>
         false
     end isDirectRef
