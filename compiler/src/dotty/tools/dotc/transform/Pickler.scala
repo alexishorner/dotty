@@ -431,10 +431,6 @@ class Pickler extends Phase {
     val packagePrefixesAndData = result.flatMap(
       _.pickled.toList.map(
         (cls, tsty) => {
-          // val className = cls.fullName.toString()
-          // val pkgName = cls.owner.fullName.toString()
-          // (pkgName, InMemoryTasty(className, tsty))
-
           val internalName =
             if (cls.is(Module)) cls.binaryClassName.stripSuffix(str.MODULE_SUFFIX).nn
             else cls.binaryClassName
@@ -464,20 +460,6 @@ class Pickler extends Phase {
       (relativePath, source)
     }).toMap
 
-    // TODO map sourceRelativePath to unit source file
-
-    // val sourcesAndClassNames = units0.flatMap(unit => unit.pickled.keys.map(cls => (unit.source, cls.fullName.toString())))
-    //                                  .groupBy(_._1)
-    //                                  .view
-    //                                  .mapValues(_.map((_, fullyQualifiedName) => {
-    //                                     // TODO convert class name
-    //                                     val path = fullyQualifiedName.split('.')
-    //                                     val binaryName = path.last
-    //                                     val packagePrefix = path.dropRight(1).toList
-    //                                     packagePrefix.map(tqn.termName(_)) ::: tqn.typeName(binaryName) :: Nil
-    //                                  }))
-    //                                  .toMap
-
     val entry = InMemoryEntry(entryDebugString, packageData)
     val cp = entry :: makeClasspath
 
@@ -499,7 +481,6 @@ class Pickler extends Phase {
 
       comparator.diffAndPropagate(cb) match
         case Left(diff) =>
-          // report.error(em"API TASTy difference detected:\n${diff.collapsedTrace}")
           report.warning(em"API TASTy difference detected:\n${diff.collapsedTrace}")
         case Right(_) =>
           ()

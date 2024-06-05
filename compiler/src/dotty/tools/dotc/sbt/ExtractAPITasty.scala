@@ -123,7 +123,7 @@ class ExtractAPITasty:
     // val fullClassName = atPhase(sbtExtractDependenciesPhase) {
     //   ExtractDependencies.classNameAsString(cls)
     // }
-    val fullClassName = cls.fullNameNoModuleClassSuffix
+    val fullClassName = cls.fullNameNoModuleClassSuffix // FIXME the names seem to be wrong
     // val binaryClassName = cls.binaryClassName
     val binaryClassName = cls.fullName // TODO
     registerProductNames(fullClassName, binaryClassName)
@@ -132,7 +132,7 @@ class ExtractAPITasty:
     val isTopLevelUniqueModule =
       cls.owner.hack_isPackageClass && cls.isModuleClass && cls.companionClass.isEmpty // TODO
     if isTopLevelUniqueModule then
-      registerProductNames(fullClassName, binaryClassName.stripSuffix(str.MODULE_SUFFIX))
+      registerProductNames(fullClassName, binaryClassName.stripSuffix(str.MODULE_SUFFIX)) // FIXME stripSuffix seems strange
   end recordNonLocalClass
 
 
@@ -256,16 +256,13 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
         // Instance of PackageSymbol
         // top level class (owner is a package symbol) that is a module class with the name ending in package or $package
         // dt.Module // TODO figure out PackageClass
-        if (sym.hack_isPackageClass) dt.PackageModule
+        if (sym.hack_isPackageClass) dt.PackageModule // FIXME unreachable since `sym` is not a `PackageSymbol`
         else dt.Module
       } else dt.ClassDef
 
     val selfType = apiType(sym.givenSelfType.orNull)
     
-    // import dotty.tools.dotc.core.Names as dottyNames
-    // import dotty.tools.dotc.core.NameOps.*
-    // val name = sym.fullName.stripModuleClassSuffix.toString
-    // val name = dottyNames.typeName(sym.fullName).stripModuleClassSuffix.toString // TODO use underlying
+    // val name = ExtractDependencies.classNameAsString(sym)
     val name = sym.fullNameNoModuleClassSuffix
       // We strip module class suffix. Zinc relies on a class and its companion having the same name
     
@@ -276,13 +273,10 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     val modifiers = apiModifiers(sym)
     val anns = apiAnnotations(sym, inlineOrigin = None).toArray
     val topLevel = sym.isTopLevel
-    // TODO CHECK: does sealedChildren include this
-    //     ANSWER: no, it doesn't
-    val childrenOfSealedClass = sym.sealedDescendants.sorted(classFirstSort).map(c =>
-      c match
+    val childrenOfSealedClass = sym.sealedDescendants.sorted(classFirstSort).map {
         case c: ClassSymbol => apiType(c.typeRef)
         case c: TermSymbol => apiType(c.termRef)
-    ).toArray
+    }.toArray
 
     val cl = api.ClassLike.of(
       name, acc, modifiers, anns, defType, api.SafeLazy.strict(selfType), api.SafeLazy.strict(structure), Constants.emptyStringArray,
@@ -303,17 +297,15 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
   def apiClassStructure(csym: ClassSymbol): api.Structure = {
     val bases = {
       val ancestorTypes0 = linearizedAncestorTypes(csym)
-      // TODO handle value classes
-      if (csym.hack_isDerivedValueClass) { // TODO (later) reimplement from ErasedValueClass
+      if (csym.hack_isDerivedValueClass) {
         // val underlying = ValueClasses.valueClassUnbox(csym).info.finalResultType
-        val underlying = csym.declarations.find(_.isParamAccessor).get.localRef.finalResultType // TODO check
+        val underlying = csym.declarations.find(_.isParamAccessor).get.localRef.finalResultType // FIXME can get fail ?
         // The underlying type of a value class should be part of the name hash
         // of the value class (see the test `value-class-underlying`), this is accomplished
         // by adding the underlying type to the list of parent types.
         underlying :: ancestorTypes0
       } else
         ancestorTypes0
-      // ancestorTypes0
     }
 
     val apiBases = bases.map(apiType)
@@ -329,7 +321,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     // TODO: We shouldn't have to compute inherited members. Instead, `Structure`
     // should have a lazy `parentStructures` field.
     val inherited = csym.linearization
-      .filter(bc => bc.sourceLanguage != SourceLanguage.Scala2)
+      .filter(_.sourceLanguage != SourceLanguage.Scala2)
       .flatMap(_.declarations.filter(s => !(s.isPrivate || declSet.contains(s))))
     // Inherited members need to be computed lazily because a class might contain
     // itself as an inherited member, like in `class A { class B extends A }`,
@@ -342,10 +334,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
   def linearizedAncestorTypes(csym: ClassSymbol): List[Type] = {
     val ref = csym.appliedRefInsideThis
     // Note that the ordering of classes in `linearization` is important.
-    csym.linearization.tail.map(ref.baseType(_).get)
-    // val ref = info.appliedRef
-    // Note that the ordering of classes in `baseClasses` is important.
-    // info.baseClasses.tail.map(ref.baseType)
+    csym.linearization.tail.map(ref.baseType(_).get) // FIXME can get fail ?
   }
 
   // The hash generated by sbt for definitions is supposed to be symmetric so
@@ -450,7 +439,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
         val restpe = mt.resultType
         val sameLength = eitherToUnion(paramss.head).hasSameLengthAs(pnames)
         assert(paramss.nonEmpty && sameLength,
-          s"mismatch for $sym, ${sym.paramSymss}")
+          s"mismatch for $sym, ${sym.declaredType}, ${sym.paramSymss}")
         paramList(mt, paramss.head) :: paramLists(restpe, paramss.tail)
       case _ =>
         Nil
@@ -482,8 +471,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
 
     val annotations = inlineExtrasAnnot ++: tparamsExtraAnnot ++: apiAnnotations(sym, inlineOrigin)
 
-    // api.Def.of(sym.zincMangledName.toString, apiAccess(sym), apiModifiers(sym),
-    //   annotations.toArray, tparams.toArray, vparamss.toArray, apiType(retTp))
     // TODO no need for zincMangledName, Constructor names just need to be unique
     api.Def.of(sym.zincMangledName.toString, apiAccess(sym), apiModifiers(sym),
       annotations.toArray, tparams.toArray, vparamss.toArray, apiType(retTp))
@@ -495,7 +482,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     val access = apiAccess(sym)
     val modifiers = apiModifiers(sym)
     val as = apiAnnotations(sym, inlineOrigin = None)
-    val tpe = sym.localRef  // TODO check
+    val tpe = sym.localRef
 
     if (sym.isTypeAlias)
       api.TypeAlias.of(name, access, modifiers, as.toArray, typeParams, apiType(tpe.bounds.high))
@@ -504,7 +491,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       assert(sym.isAbstractMember || sym.isAbstractClass || sym.isInstanceOf[TypeParamSymbol]) // TODO check
       api.TypeDeclaration.of(name, access, modifiers, as.toArray, typeParams, apiType(tpe.bounds.low), apiType(tpe.bounds.high))
     }
-    // api.TypeAlias.of(name, access, modifiers, as.toArray, typeParams, Constants.emptyType)
   }
 
   // Hack to represent dotty types which don't have an equivalent in xsbti
@@ -513,7 +499,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       api.SafeLazy.strict(Array()), api.SafeLazy.strict(Array()))
   }
 
-  def apiType(tp: TypeMappable | Null): api.Type = { // TOOD maybe use Option[TypeMappable]
+  def apiType(tp: TypeMappable | Null): api.Type = { // `null` replaces `NoType` which does not exist in TASTy-Query
     typeCache.getOrElseUpdate(tp, computeType(tp))
   }
 
@@ -521,31 +507,34 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     // TODO: Never dealias. We currently have to dealias because
     // sbt main class discovery relies on the signature of the main
     // method being fully dealiased. See https://github.com/sbt/zinc/issues/102
-    // val tp2 = if (!tp.isLambdaSub) tp.dealiasKeepAnnots else tp
-    
-    val tp2 = try
-      if tp != null && !tp.hack_isLambdaSub && tp != defn.SyntacticNothingType /*FIXME workaround to avoid infinite recursion*/ then tp.hack_dealiasKeepAnnots else tp // FIXME isLambdaSub is private
-    catch
-      case e => 
-        error(s"Error in computeType: $source, $tp")
-        error(e.toString)
-        error(e.getStackTrace.mkString("\n"))
-        null
-    // val tp2 = tp
-    tp2 match { // TODO add more cases
-      case NoPrefix /*| NoType*/ | null =>
+    val tp2 =
+      try
+        if tp != null &&
+           !tp.hack_isLambdaSub &&
+           tp != defn.SyntacticNothingType /*FIXME workaround to avoid infinite recursion*/
+           then
+          tp.hack_dealiasKeepAnnots
+        else
+          tp
+      catch
+        case e => // FIXME probaly classpath issue
+          error(s"Error in computeType: $source, $tp\n${e.toString}\n${e.getStackTrace.mkString("\n")}")
+          null
+    tp2 match {
+      case NoPrefix | null =>
         Constants.emptyType
       case pr: PackageRef =>
         val pathComponents =
-          pr.fullyQualifiedName.toString.split('.')
-            .map(api.Id.of)
-            .map(_.asInstanceOf[api.PathComponent])
-        api.Singleton.of(api.Path.of(pathComponents)) // TODO add Constants.thisPath
+          pr.fullyQualifiedName
+            .path
+            .map(n => api.Id.of(n.toString))
+            .toArray ++ Array(Constants.thisPath) // we add `thisPath` to mimic dotty where packages are represented ad classes
+        api.Singleton.of(api.Path.of(pathComponents))
       case tp: NamedType =>
         val optSym = tp.optSymbol
-        val (apiPrefix, name) =
-          if optSym.isEmpty then
-            (apiType(tp.prefix), "<none>")
+        val (prefix, name) =
+          if optSym.isEmpty then // because TASTy-Query does not have `NoSymbol`
+            (tp.prefix, "<none>")
           else
             val sym = optSym.get
             val owner = sym.owner
@@ -557,13 +546,13 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
             // that some API changed when it didn't, leading to overcompilation
             // (recompiling more things than what is needed for incremental
             // compilation to be correct).
-            val apiPrefix =
+            val prefix =
               if owner.isPackage then // { type T } here T does not have an owner
-                apiThis(owner)
+                owner.asPackage.packageRef
               else
-                apiType(tp.prefix)
-            (apiPrefix, sym.name.toString) // TODO check
-        api.Projection.of(apiPrefix, name)
+                tp.prefix
+            (prefix, sym.name.toString) // TODO check
+        api.Projection.of(apiType(prefix), name)
       case tp: AppliedType =>
         val tycon = tp.tycon
         val args = tp.args
@@ -609,9 +598,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
           case rt: TypeRefinement =>
             typeRefinement(name, rt.refinedBounds)
           case _ =>
-            // TODO proper logging
             debugLog(s"sbt-api: skipped structural refinement in $rt")
-            // report.debuglog(i"sbt-api: skipped structural refinement in $rt")
             null
         }
 
@@ -683,7 +670,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       // case tp: TypeVar =>
       //   apiType(tp.underlying)
       case tp: RepeatedType =>
-        val apiPrefix = apiThis(defn.scalaPackage.packageRef.symbol)
+        val apiPrefix = apiType(defn.scalaPackage.packageRef)
         val apiTycon = api.Projection.of(apiPrefix, tpnme.RepeatedParamClassMagic.toString)
         val apiArg = apiType(tp.elemType)
         api.Parameterized.of(apiTycon, Array(apiArg))
@@ -732,8 +719,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
   }
 
   def apiAccess(sym: Symbol): api.Access = {
-    // Symbols which are private[foo] do not have the flag Private set,
-    // but their `privateWithin` exists, see `Parsers#ParserCommon#normalize`.
     import tastyquery.Modifiers.Visibility.*
     val visibility = sym match
       case sym: TermOrTypeSymbol => Some(sym.visibility)
@@ -745,11 +730,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     else if (visibility.contains(ProtectedThis))
       Constants.protectedLocal
     else {
-      // val qualifier =
-      //   if (sym.privateWithin eq NoSymbol)
-      //     Constants.unqualified
-      //   else
-      //     api.IdQualifier.of(sym.privateWithin.fullName.toString)
       val qualifier =
         val scope = visibility.flatMap {
           case ScopedProtected(scope) => Some(scope)
@@ -758,9 +738,11 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
         }
         scope match
           case Some(scope) => api.IdQualifier.of(scope.fullName.toString)
-          case _ =>
-            Constants.unqualified
-      if (visibility.exists{ case Protected | ProtectedThis | ScopedProtected => true; case _ => false})
+          case _ => Constants.unqualified
+      if visibility.exists {
+            case Protected | ProtectedThis | ScopedProtected => true
+            case _ => false
+         } then
         api.Protected.of(qualifier)
       else
         api.Private.of(qualifier)
@@ -768,11 +750,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
   }
 
   def apiModifiers(sym: Symbol): api.Modifiers = {
-    // val absOver = sym.is(AbsOverride)
-    // val abs = absOver || sym.isOneOf(Trait | Abstract | Deferred)
-    // val over = absOver || sym.is(Override)
-    // new api.Modifiers(abs, over, sym.is(Final), sym.is(Sealed),
-    //   sym.isOneOf(GivenOrImplicit), sym.is(Lazy), sym.is(Macro), sym.isSuperAccessor)
     val absOver = sym.isAbstractOverride
     val abs = absOver || sym.isTrait || sym.isAbstractClass || sym.isAbstractMember
     val over = absOver || sym.hack_isOverride // TODO ignore override
@@ -837,9 +814,13 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       val sym = annot.symbol
       // if sym.exists && sym != defn.BodyAnnot && sym != defn.ChildAnnot then
       //   annots += apiAnnotation(annot)
-      if sym != MyDefinitions.internalBodyAnnotClass &&
-         sym != MyDefinitions.internalChildAnnotClass &&
-         sym.sourceLanguage != SourceLanguage.Java then // FIXME workaround for Java annotations
+      if sym != MyDefinitions.internalBodyAnnotClass
+         && sym != MyDefinitions.internalChildAnnotClass
+         // FIXME workaround for Java annotations:
+         //   "tastyquery.Exceptions$MemberNotFoundException:
+         //     Member <init> not found in TypeRef(PackageRef(java.lang), Deprecated)"
+         && sym.sourceLanguage != SourceLanguage.Java
+         then
         annots += apiAnnotation(annot)
     }
 
@@ -887,7 +868,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
 
     def cannotHash(what: String, elem: Any, tree: Tree): Unit =
       internalError(s"Don't know how to produce a stable hash for $what", tree.pos)
-      // internalError(i"Don't know how to produce a stable hash for $what", pos.sourcePos)
 
     def positionedHash(p: Tree, initHash: Int): Int =
       var h = initHash
