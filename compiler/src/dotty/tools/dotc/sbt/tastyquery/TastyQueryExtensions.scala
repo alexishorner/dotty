@@ -355,18 +355,19 @@ object Extensions:
       sym :: sym.sealedStrictDescendants
     end sealedDescendants
 
-    def hack_findMember(pred: TermOrTypeSymbol => Boolean): Option[TermOrTypeSymbol] =
+    def hack_findMember(name: UnsignedTermName)(pred: TermOrTypeSymbol => Boolean): Option[TermOrTypeSymbol] =
       @tailrec
       def lookup(lin: List[ClassSymbol]): Option[TermOrTypeSymbol] = lin match
         case parentCls :: linRest =>
-          val res = parentCls.declarations.find(sym => !sym.isPrivate && pred(sym))
+          val res = parentCls.getAllOverloadedDecls(name).find(sym => !sym.isPrivate && pred(sym))
           if res.isDefined then res
           else lookup(linRest)
         case Nil =>
           None
       end lookup
 
-      sym.declarations.find(pred).orElse(
+      // cannot use getDecl, because it requires a SignedName to find methods
+      sym.getAllOverloadedDecls(name).find(pred).orElse(
         lookup(sym.linearization.tail)
       )
     end hack_findMember
@@ -383,7 +384,7 @@ object Extensions:
 
       // TODO implement with getMember or getDecl
       (sym.isModuleClass || sym.isStatic) &&
-        sym.hack_findMember {
+        sym.hack_findMember(CommonNames.main) {
           case decl: TermSymbol => decl.isMainMethod
           case _ => false
         }.isDefined
