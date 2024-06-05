@@ -59,8 +59,11 @@ class ExtractAPITasty:
     val nonLocalClassSymbols = new mutable.HashMap[SourceFile, mutable.HashSet[ClassSymbol]]
 
     // FIXME Macros:
-    //   tastyquery.Exceptions$TastyFormatException:
-    //     Unexpected term tag UnknownTag(179) at address Addr(106) in file Macro
+    //   "tastyquery.Exceptions$TastyFormatException:
+    //     Unexpected term tag UnknownTag(179) at address Addr(106) in file Macro"
+    // probably because TASTy-Query does not support the latest TASTy version:
+    // `// final val ??? = 179` in tastyquery https://github.com/scalacenter/tasty-query/blob/bd0a72cf6962d7fef0a65086afe529bdbd657a2d/tasty-query/shared/src/main/scala/tastyquery/reader/tasties/TastyFormat.scala#L588C3-L588C25
+    // `final val SPLICE = 179` in dotty https://github.com/scala/scala3/blob/746b00b450adac7a6f5159254a385b3407ca420d/tasty/src/dotty/tools/tasty/TastyFormat.scala#L619
     val symbols =
       try // Workaround, because tastyquery does not add entries with no packages to its lookup
         ctx.findSymbolsByClasspathEntry(entry).toList
