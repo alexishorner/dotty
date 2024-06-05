@@ -799,8 +799,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
    */
   def apiAnnotations(s: Symbol, inlineOrigin: Option[Symbol]): List[api.Annotation] = {
     val annots = new mutable.ListBuffer[api.Annotation]
-    if s.name.toString.contains("Inline") then
-      val dummy = 42
     val inlineBodyOpt = s.hack_bodyToInline
     if !inlineBodyOpt.isEmpty then
       val inlineBody = inlineBodyOpt.get
