@@ -33,6 +33,7 @@ import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 import java.util.concurrent.atomic.AtomicBoolean
 import java.nio.file.Files
+import dotty.tools.dotc.sbt.debug.RecordingIncCallback
 
 object Pickler {
   val name: String = "pickler"
@@ -425,6 +426,8 @@ class Pickler extends Phase {
     import dotty.tools.dotc.sbt.LazyTastyQueryClasspath.*
     import tastyquery.Names as tqn
 
+    val tastyquerySetupStart_ns = if ctx.settings.YbenchAPI.value then System.nanoTime() else 0L
+
     val sourceroot = ctx.settings.sourceroot.value
     val entryDebugString = sourceroot
 
@@ -465,19 +468,59 @@ class Pickler extends Phase {
 
     val extract = ExtractAPITasty()
     val cb = ctx.incCallback
-
-    // given ReadOnlyContext = if useExecutor then ReadOnlyContext.buffered else ReadOnlyContext.eager // TODO maybe avoid duplication of this line with a method
-    given ReadOnlyContext = ReadOnlyContext.eager // TODO remove
     
-    if ctx.settings.YcompareAsyncTasty.value then
-      val comparator = debug.IncCallbackComparator()
-
+    def runAPI(cb: IncrementalCallback) =
       val extractApi = ExtractAPI()
-      extractApi.runOn(units)(using ctx.fresh.setIncCallback(comparator.apiCallback)
+      extractApi.runOn(units)(using ctx.fresh.setIncCallback(cb)
                                              .setSetting(ctx.settings.YforceSbtPhases, true)
                                              .setSetting(ctx.settings.YasyncTasty, false)
                                              .setSetting(ctx.settings.YdisableExtractAPI, false))
-      extract.runOn(entry, cp, relativePathToSource, comparator.apiTastyCallback) // FIXME ugly duplication
+
+    def runAsyncAPI(cb: IncrementalCallback | Null) =
+      extract.runOn(entry, cp, relativePathToSource, cb)
+
+
+    // given ReadOnlyContext = if useExecutor then ReadOnlyContext.buffered else ReadOnlyContext.eager // TODO avoid duplication
+    given ReadOnlyContext = ReadOnlyContext.eager // TODO remove
+
+    val tastyquerySetupEnd_ns = if ctx.settings.YbenchAPI.value then System.nanoTime() else 0L
+    
+    if ctx.settings.YbenchAPI.value then
+      def benchmarkPhase(run: IncrementalCallback => Unit): (Long, RecordingIncCallback) =
+        val recordingCb = RecordingIncCallback()
+        val start_ns = System.nanoTime()
+        run(recordingCb)
+        val stop_ns = System.nanoTime()
+        val elapsed_ms = (stop_ns - start_ns) / 1000000
+        (elapsed_ms, recordingCb)
+
+      val (apiTime_ms, _) = benchmarkPhase(runAPI)
+      val (asyncTime_ms, asyncCb) = benchmarkPhase(runAsyncAPI)
+
+      asyncCb.propagate(cb)
+
+      val tastyquerySetupTime_ms = (tastyquerySetupEnd_ns - tastyquerySetupStart_ns) / 1000000
+
+      import java.io.{BufferedWriter, FileWriter, File}
+      val file = File("api_benchmark.csv")
+      val firstCreated = !file.exists
+      val bw = BufferedWriter(
+        FileWriter(
+            file,
+            true
+        )
+      )
+
+      try
+        if firstCreated then
+          bw.write("apiTime_ms,tastyquerySetupTime_ms,asyncTime_ms\n")
+        bw.write(s"${apiTime_ms},${tastyquerySetupTime_ms},${asyncTime_ms}\n")
+      finally bw.close()
+    else if ctx.settings.YcompareAsyncTasty.value then
+      val comparator = debug.IncCallbackComparator()
+
+      runAPI(comparator.apiCallback)
+      runAsyncAPI(comparator.apiTastyCallback)
 
       comparator.diffAndPropagate(cb) match
         case Left(diff) =>

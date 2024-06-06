@@ -20,37 +20,11 @@ class IncCallbackComparator:
     }).toMap
     
     val diff = IncDiff.groupIdentical(merged)
+    apiTastyCallback.propagate(cb)
     if diff.hasDifferences then
-
-      // val generatedNonLocalClasses = apiCallback.results.view.mapValues(v => v.filter(_.isInstanceOf[GeneratedNonLocalClass]))
-      
-      if cb != null then // TODO remove
-          for (source, results) <- apiTastyCallback.results do
-            for result <- results do
-              result match
-                case src @ StartSource(sourceFile) =>
-                  // generatedNonLocalClasses(src).foreach { // TODO remove
-                  //   case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) =>
-                  //     cb.generatedNonLocalClass(source, classFile, binaryClassName, srcClassName)
-                  // }
-                  cb.startSource(sourceFile)
-                case Api(sourceFile, classApi) => cb.api(sourceFile, classApi)
-                case MainClass(sourceFile, className) => cb.mainClass(sourceFile, className)
-                case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) => cb.generatedNonLocalClass(source, classFile, binaryClassName, srcClassName)
-                // case GeneratedNonLocalClass(source, classFile, binaryClassName, srcClassName) => ()
-                case NoResult => ()
-
       Left(diff)
     else
-      Right(
-        if cb != null then
-          for (source, results) <- apiTastyCallback.results do
-            for result <- results do
-              result match
-                case StartSource(sourceFile) => cb.startSource(sourceFile)
-                case Api(sourceFile, classApi) => cb.api(sourceFile, classApi)
-                case MainClass(sourceFile, className) => cb.mainClass(sourceFile, className)
-        else ())
+      Right(())
 
   sealed trait IncDiffEntry
   case class Different(expected: String, actual: String) extends IncDiffEntry:
