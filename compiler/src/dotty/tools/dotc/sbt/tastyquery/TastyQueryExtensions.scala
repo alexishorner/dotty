@@ -194,9 +194,9 @@ object Extensions:
       hasOpenLevel(OpenLevel.Sealed)
     end isSealed
 
-    def hack_isPackageClass: Boolean =
+    def isPackageClass: Boolean =
       sym.isPackage
-    end hack_isPackageClass
+    end isPackageClass
 
     // `TermSymbol` predicates
 

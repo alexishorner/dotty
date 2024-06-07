@@ -36,18 +36,10 @@ import dotty.tools.dotc.typer.ErrorReporting.err
 
 
 class ExtractAPITasty:
-  val hasErrors: AtomicBoolean = AtomicBoolean() // TODO store errors to report them later
+  val hasErrors: AtomicBoolean = AtomicBoolean()
 
   var mySourceAndClasses: List[(SourceFile, Seq[api.ClassLike])] = Nil
   
-  private def listDecls(symbol: Symbol)(using Context): List[Symbol] = // TODO remove
-    val decls = symbol match
-      case symbol: DeclaringSymbol =>
-        symbol.declarations.flatMap(listDecls)
-      case _ => Nil
-
-    symbol :: decls
-
   def runOn(entry: ClasspathEntry, cp: Classpath, relativePathToDottySource: Map[String, SourceFile],
             cb: interfaces.IncrementalCallback | Null)(using ReadOnlyContext): Unit =
     def withIncCallback(op: interfaces.IncrementalCallback => Unit): Unit =
@@ -126,17 +118,13 @@ class ExtractAPITasty:
       cb.generatedNonLocalClass(sourceFile, classFile.toPath(), binaryClassName, fullClassName)
     end registerProductNames
 
-    // val fullClassName = atPhase(sbtExtractDependenciesPhase) {
-    //   ExtractDependencies.classNameAsString(cls)
-    // }
-    val fullClassName = cls.fullNameNoModuleClassSuffix // FIXME the names seem to be wrong
-    // val binaryClassName = cls.binaryClassName
-    val binaryClassName = cls.fullName // TODO
+    val fullClassName = cls.fullNameNoModuleClassSuffix // FIXME not exactly the same as in ExtractAPI
+    val binaryClassName = cls.fullName // TODO use binaryClassName instead
     registerProductNames(fullClassName, binaryClassName)
 
     // Register the names of top-level module symbols that emit two class files
     val isTopLevelUniqueModule =
-      cls.owner.hack_isPackageClass && cls.isModuleClass && cls.companionClass.isEmpty // TODO
+      cls.owner.isPackageClass && cls.isModuleClass && cls.companionClass.isEmpty
     if isTopLevelUniqueModule then
       registerProductNames(fullClassName, binaryClassName.stripSuffix(str.MODULE_SUFFIX)) // FIXME stripSuffix seems strange
   end recordNonLocalClass
@@ -169,7 +157,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     hasErrors = true
 
   /** Report an internal error in incremental compilation. */
-  private def internalError(msg: => String, pos: SourcePosition = SourcePosition.NoPosition): Unit = // TODO move method
+  private def internalError(msg: => String, pos: SourcePosition = SourcePosition.NoPosition): Unit =
     error(s"Internal error in the incremental compiler while compiling ${source}: $msg", pos)
 
   /** This cache is necessary for correctness, see the comment about inherited
@@ -257,19 +245,13 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     val defType =
       if (sym.isTrait) dt.Trait
       else if (sym.isModuleClass) {
-        // TODO PackageClass is when we have package object
-        // TODO look at name
-        // Instance of PackageSymbol
-        // top level class (owner is a package symbol) that is a module class with the name ending in package or $package
-        // dt.Module // TODO figure out PackageClass
-        if (sym.hack_isPackageClass) dt.PackageModule // FIXME unreachable since `sym` is not a `PackageSymbol`
+        if (sym.isPackageClass) dt.PackageModule // FIXME unreachable since `sym` is not a `PackageSymbol`
         else dt.Module
       } else dt.ClassDef
 
     val selfType = apiType(sym.givenSelfType.orNull)
     
-    // val name = ExtractDependencies.classNameAsString(sym)
-    val name = sym.fullNameNoModuleClassSuffix
+    val name = sym.fullNameNoModuleClassSuffix // FIXME not the same as `ExtractDependencies.classNameAsString(sym)`
       // We strip module class suffix. Zinc relies on a class and its companion having the same name
     
     val tparams = sym.typeParams.map(apiTypeParameter).toArray
@@ -305,7 +287,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     val bases = {
       val ancestorTypes0 = linearizedAncestorTypes(csym)
       if (csym.hack_isDerivedValueClass) {
-        // val underlying = ValueClasses.valueClassUnbox(csym).info.finalResultType
         val underlying = csym.declarations.find(_.isParamAccessor).get.localRef.finalResultType // FIXME can get fail ?
         // The underlying type of a value class should be part of the name hash
         // of the value class (see the test `value-class-underlying`), this is accomplished
@@ -494,8 +475,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     if (sym.isTypeAlias)
       api.TypeAlias.of(name, access, modifiers, as.toArray, typeParams, apiType(tpe.bounds.high))
     else {
-      // assert(sym.isAbstractOrParamType)
-      assert(sym.isAbstractMember || sym.isAbstractClass || sym.isInstanceOf[TypeParamSymbol]) // TODO check
+      assert(sym.isAbstractMember || sym.isAbstractClass || sym.isInstanceOf[TypeParamSymbol])
       api.TypeDeclaration.of(name, access, modifiers, as.toArray, typeParams, apiType(tpe.bounds.low), apiType(tpe.bounds.high))
     }
   }
@@ -558,7 +538,7 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
                 owner.asPackage.packageRef
               else
                 tp.prefix
-            (prefix, sym.name.toString) // TODO check
+            (prefix, sym.name.toString)
         api.Projection.of(apiType(prefix), name)
       case tp: AppliedType =>
         val tycon = tp.tycon
@@ -689,7 +669,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
       case tp: NothingType =>
         apiType(defn.SyntacticNothingType)
       case _ => {
-        // internalError(i"Unhandled type $tp of class ${tp.getClass}")
         internalError(s"Unhandled type $tp of class ${tp.getClass}")
         Constants.emptyType
       }
@@ -819,8 +798,6 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     import tastyquery.MyDefinitions
     s.annotations.foreach { annot =>
       val sym = annot.symbol
-      // if sym.exists && sym != defn.BodyAnnot && sym != defn.ChildAnnot then
-      //   annots += apiAnnotation(annot)
       if sym != MyDefinitions.internalBodyAnnotClass
          && sym != MyDefinitions.internalChildAnnotClass
          // FIXME workaround for Java annotations:
@@ -879,15 +856,10 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     def positionedHash(p: Tree, initHash: Int): Int =
       var h = initHash
 
-      // p match
-      //   case p: ast.WithLazyFields => p.forceFields()
-      //   case _ =>
-
       if inlineOrigin.isDefined then
         p match
           case ref: TermReferenceTree @unchecked =>
             val sym = ref.symbol
-            // if sym.is(Inline, butNot = Param) && !seenInlineCache.contains(sym) then
             if sym.isInline && !seenInlineCache.contains(sym) then  // TODO butNot = Param
               // An inline method that calls another inline method will eventually inline the call
               // at a non-inline callsite, in this case if the implementation of the nested call
