@@ -279,10 +279,11 @@ private class ExtractAPITastyCollector(source: SourceFile, nonLocalClassSymbols:
     val modifiers = apiModifiers(sym)
     val anns = apiAnnotations(sym, inlineOrigin = None).toArray
     val topLevel = sym.isTopLevel
-    val childrenOfSealedClass = sym.sealedDescendants.sorted(classFirstSort).map {
-        case c: ClassSymbol => apiType(c.typeRef)
-        case c: TermSymbol => apiType(c.termRef)
-    }.toArray
+    val childrenOfSealedClass =
+      sym.sealedDescendants
+         .sorted(classFirstSort)
+         .map(c => apiType(c.localRef))
+         .toArray
 
     val cl = api.ClassLike.of(
       name, acc, modifiers, anns, defType, api.SafeLazy.strict(selfType), api.SafeLazy.strict(structure), Constants.emptyStringArray,

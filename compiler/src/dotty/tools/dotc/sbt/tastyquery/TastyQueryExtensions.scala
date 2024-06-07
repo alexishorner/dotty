@@ -48,16 +48,6 @@ object Extensions:
       case name: TypeName => name.mangledString
     end mangledString
 
-    // def isPackageObjectClassName: Boolean = name match
-    //   case ObjectClassTypeName(objName) => objName.toTermName.isPackageObjectName
-    //   case _                            => false
-    // end isPackageObjectClassName
-
-    // /** is this the name of an object enclosing package-level definitions? */
-    // def isPackageObjectName: Boolean = name match
-    //   case name: TermName => name == CommonNames.pkg/* || name.endsWith("$package")*/
-    //   case name: TypeName => name.isPackageObjectClassName
-    // end isPackageObjectName
   end extension
 
   extension (name: TypeName)(using Context)
@@ -68,12 +58,6 @@ object Extensions:
     def mangledString: String = name.toString // TODO implement
   end extension
 
-  // extension (name: SimpleName)(using Context)
-  //   def isPackageObjectName: Boolean =
-  //     name.name == "package" || name.name.endsWith("$package")
-  //   end isPackageObjectName
-  // end extension
-  
   extension (sym: Symbol)(using Context)
     @tailrec
     private def fullNameList(currentSym: Symbol = sym, acc: List[Name] = Nil): List[Name] =
@@ -90,20 +74,10 @@ object Extensions:
 
     // TODO add separator
     def fullName: String =
-      // val b = new StringBuilder
-      // def build(sym: Symbol): Unit = {
-      //   if (sym.owner != null)
-      //     build(sym.owner)
-      //     b append "."
-      //   b append sym.name 
-      // }
-      // build(sym)
-      // b.toString
       fullNameList().mkString(".")
     end fullName
 
     def fullNameNoModuleClassSuffix: String =
-      // sym.fullNameList().map(_.stripModuleClassSuffix2).filter(_ != nme.RootName).mkString(".")
       sym.fullNameList().map(_.stripModuleClassSuffix2).mkString(".")
     end fullNameNoModuleClassSuffix
 
@@ -116,7 +90,6 @@ object Extensions:
         termName(sym.owner.nn.fullNameList().map(_.mangledString).mkString(";") ++ ";init;")
       else
         sym.name.stripModuleClassSuffix2
-      // sym.name.stripModuleClassSuffix2.toString // TODO implement
 
     def thisType: Prefix = sym match
       case sym: ClassSymbol => sym.thisType
@@ -137,14 +110,13 @@ object Extensions:
     /** `sym` is an inline method with a known body to inline.
      */
     def hack_hasBodyToInline: Boolean =
-      sym.isInline && sym.isMethod/* && sym.hasAnnotation(MyDefinitions.internalBodyAnnotClass)*/
+      sym.isInline && sym.isMethod/* && sym.hasAnnotation(MyDefinitions.internalBodyAnnotClass)*/ // FIXME the annotation is never present
 
     /** The body to inline for method `sym`, or `EmptyTree` if none exists.
      *  @pre  hasBodyToInline(sym)
      */
     def hack_bodyToInline: Option[Tree] =
       if sym.hack_hasBodyToInline then
-        // Some(sym.getAnnotation(MyDefinitions.internalBodyAnnotClass).get.tree)
         Some(sym.tree.get.asInstanceOf[DefDef].rhs.get)
       else
         None
@@ -159,16 +131,11 @@ object Extensions:
       sym.name.toTermName == Names.nme.EmptyPackageName && owner != null && owner.isRoot
     end isEmptyPackage
 
-    // /** Is this symbol a package object or its module class? */
-    // def isPackageObject: Boolean =
-    //   sym.name.isPackageObjectName && owner.is(Package) && this.is(Module)
-    // end isPackageObject
-
     /** Is this symbol the empty package class or its companion object? */
     def isEffectiveRoot: Boolean = sym.isRoot || sym.isEmptyPackage
 
     def isConstructor: Boolean =
-      sym.name == nme.Constructor // FIXME why do we need `Names` prefix ?
+      sym.name == nme.Constructor
     end isConstructor
     
     def isTopLevel: Boolean =
@@ -228,10 +195,7 @@ object Extensions:
     end isSealed
 
     def hack_isPackageClass: Boolean =
-      sym.isPackage // FIXME difference between Package and PackageClass
-      // predicateAs[ClassSymbol](sym => 
-      //   sym.isTopLevel && sym.isModuleClass && sym.name.isPackageObjectClassName
-      // )
+      sym.isPackage
     end hack_isPackageClass
 
     // `TermSymbol` predicates
@@ -282,10 +246,6 @@ object Extensions:
   end extension
 
   extension(sym: ClassSymbol)(using Context)
-    def typeRef: TypeRef =
-      TypeRef(sym.owner.thisType, sym)
-    end typeRef
-
     /** Recursively assemble all children of this symbol, Preserves order of insertion.
      */
     def sealedStrictDescendants: List[ClassSymbol | TermSymbol] =
@@ -351,7 +311,6 @@ object Extensions:
       findLvl2(lvl1, lvl1, seenOrNull = null)
 
     def sealedDescendants: List[ClassSymbol | TermSymbol] =
-      // sym :: sym.sealedChildren // TODO reimplement like in dotty
       sym :: sym.sealedStrictDescendants
     end sealedDescendants
 
@@ -366,23 +325,12 @@ object Extensions:
           None
       end lookup
 
-      // cannot use getDecl, because it requires a SignedName to find methods
       sym.getAllOverloadedDecls(name).find(pred).orElse(
         lookup(sym.linearization.tail)
       )
     end hack_findMember
 
     def hasMainMethod: Boolean =
-      import Signatures.*
-      // val arraySignatureName = defn.ArrayClass.signatureName
-      // val main = SignedName(CommonNames.main, Signature(List(ParamSig.Term(arraySignatureName)), defn.UnitClass.signatureName))
-      // sym.getMember(main) match
-      //   case Some(main) =>
-      //     main.isMainMethod && (sym.isModuleClass || sym.isStatic)
-      //   case None => false
-      // end match
-
-      // TODO implement with getMember or getDecl
       (sym.isModuleClass || sym.isStatic) &&
         sym.hack_findMember(CommonNames.main) {
           case decl: TermSymbol => decl.isMainMethod
@@ -396,10 +344,6 @@ object Extensions:
   end extension
 
   extension(sym: TermSymbol)(using Context)
-    def termRef: TermRef =
-      TermRef(sym.owner.thisType, sym)
-    end termRef
-
     def isMainMethod: Boolean =
       (sym.name == CommonNames.main) && (sym.declaredType match {
         case MethodTypeExtractor(_, List(el), restpe) =>
